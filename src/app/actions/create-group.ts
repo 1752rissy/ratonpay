@@ -61,7 +61,6 @@ export async function createGroup(formData: FormData) {
                 name: payerName,
                 email: ownerEmail || null,
                 joinedAt: new Date().toISOString(),
-                joinedAt: new Date().toISOString(),
                 status: 'paid', // Admin starts as valid since they paid the bill
                 paidAt: new Date().toISOString() // Mark as paid now
             }
