@@ -4,9 +4,9 @@ import { useEffect, useState } from "react";
 import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import PizzaVisualizer from "./PizzaVisualizer";
-import { Share2, CheckCircle, Clock, Loader2 } from "lucide-react";
+import { Share2, CheckCircle, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { createPaymentPreference } from "@/app/actions/create-preference";
+import PaymentModal from "./PaymentModal";
 
 interface Friend {
     id: string;
@@ -18,6 +18,7 @@ interface Friend {
 
 interface Bill {
     description: string;
+    alias?: string;
     totalAmount: number;
     friendsCount: number;
     amountPerPerson: number;
@@ -28,6 +29,7 @@ interface Bill {
 export default function BillDashboard({ billId }: { billId: string }) {
     const [bill, setBill] = useState<Bill | null>(null);
     const [loading, setLoading] = useState(true);
+    const [selectedFriend, setSelectedFriend] = useState<Friend | null>(null);
 
     useEffect(() => {
         const unsub = onSnapshot(doc(db, "bills", billId), (doc) => {
@@ -52,69 +54,54 @@ export default function BillDashboard({ billId }: { billId: string }) {
     return (
         <div className="space-y-8">
             <div className="text-center space-y-2">
-                <h1 className="text-2xl font-bold">{bill.description}</h1>
-                <div className="text-slate-500">
-                    Total: <span className="font-mono font-bold text-slate-900">${bill.totalAmount}</span>
+                <h1 className="text-3xl font-black text-white tracking-tight drop-shadow-lg">{bill.description}</h1>
+                <div className="text-zinc-400 font-mono">
+                    Total: <span className="font-bold text-emerald-400 text-xl">${bill.totalAmount}</span>
                 </div>
+                {bill.alias && (
+                    <div className="bg-zinc-900 border border-zinc-800 inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs mt-2 shadow-inner">
+                        <span className="text-zinc-500 font-bold uppercase tracking-wider">Alias:</span>
+                        <span className="font-mono font-bold text-emerald-400 select-all tracking-wider">{bill.alias}</span>
+                    </div>
+                )}
             </div>
 
             <PizzaVisualizer friends={bill.friends} />
 
             {isCompleted && (
-                <div className="bg-green-100 text-green-800 p-4 rounded-xl text-center font-bold animate-bounce">
+                <div className="bg-emerald-500/10 border border-emerald-500/50 text-emerald-400 p-4 rounded-xl text-center font-bold animate-pulse shadow-[0_0_15px_rgba(16,185,129,0.3)]">
                     🎉 ¡Todos pagaron! La cuenta está cerrada.
                 </div>
             )}
 
             <div className="grid gap-3">
                 {bill.friends.map((friend, i) => (
-                    <div key={friend.id} className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex items-center justify-between">
+                    <div key={friend.id} className="bg-zinc-900/50 backdrop-blur-sm p-4 rounded-xl shadow-lg border border-zinc-800 flex items-center justify-between group hover:border-zinc-700 transition-all">
                         <div className="flex items-center gap-3">
                             <div className={cn(
-                                "w-10 h-10 rounded-full flex items-center justify-center font-bold text-white",
-                                friend.status === 'paid' ? "bg-green-500" : "bg-slate-300"
+                                "w-10 h-10 rounded-full flex items-center justify-center font-bold text-white shadow-md transition-all",
+                                friend.status === 'paid'
+                                    ? "bg-gradient-to-br from-emerald-500 to-emerald-700 shadow-emerald-500/20"
+                                    : "bg-zinc-800 text-zinc-400 border border-zinc-700"
                             )}>
-                                {friend.status === 'paid' ? <CheckCircle className="w-5 h-5" /> : (i + 1)}
+                                {friend.status === 'paid' ? <CheckCircle className="w-5 h-5 text-white" /> : (i + 1)}
                             </div>
                             <div>
-                                <p className="font-medium">{friend.name}</p>
-                                <p className="text-xs text-slate-500">${friend.amount}</p>
+                                <p className="font-bold text-zinc-200">{friend.name}</p>
+                                <p className="text-xs text-zinc-500 font-mono">${friend.amount}</p>
                             </div>
                         </div>
 
                         {friend.status === 'pending' && (
                             <button
-
-                                className="text-xs bg-slate-900 text-white px-3 py-2 rounded-lg hover:bg-slate-800 transition-colors flex items-center gap-2"
-                                onClick={async () => {
-                                    const btn = document.getElementById(`btn-${friend.id}`);
-                                    if (btn) btn.innerHTML = "Cargando...";
-                                    try {
-                                        const result = await createPaymentPreference(
-                                            billId,
-                                            friend.id,
-                                            friend.amount,
-                                            bill.description
-                                        );
-
-                                        if (result.url) {
-                                            window.location.href = result.url;
-                                        } else {
-                                            alert("Error al generar pago");
-                                            if (btn) btn.innerHTML = "Pagar";
-                                        }
-                                    } catch (e) {
-                                        alert("Error de conexión");
-                                        if (btn) btn.innerHTML = "Pagar";
-                                    }
-                                }}
-                                id={`btn-${friend.id}`}
+                                className="text-xs bg-zinc-800 border border-zinc-700 hover:border-emerald-500 hover:text-emerald-400 text-zinc-300 px-3 py-2 rounded-lg transition-all flex items-center gap-2 hover:shadow-[0_0_10px_rgba(16,185,129,0.2)]"
+                                onClick={() => setSelectedFriend(friend)}
                             >
-                                Pagar
+                                Ya pagué
                             </button>
                         )}
                         {friend.status === 'paid' && (
-                            <span className="text-green-600 text-sm font-bold flex items-center gap-1">
+                            <span className="text-emerald-400 text-sm font-bold flex items-center gap-1 drop-shadow-sm">
                                 <CheckCircle className="w-4 h-4" /> Pagado
                             </span>
                         )}
@@ -126,11 +113,22 @@ export default function BillDashboard({ billId }: { billId: string }) {
                 href={shareUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="block w-full bg-green-500 hover:bg-green-600 text-white font-bold py-4 px-6 rounded-xl text-center transition-all shadow-md active:scale-95 flex items-center justify-center gap-2"
+                className="block w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-4 px-6 rounded-xl text-center transition-all shadow-lg hover:shadow-emerald-500/20 active:scale-95 flex items-center justify-center gap-2 uppercase tracking-wider"
             >
                 <Share2 className="w-5 h-5" />
                 Compartir por WhatsApp
             </a>
+
+            {selectedFriend && bill && (
+                <PaymentModal
+                    isOpen={!!selectedFriend}
+                    onClose={() => setSelectedFriend(null)}
+                    billId={billId}
+                    friend={selectedFriend}
+                    amount={bill.amountPerPerson}
+                    alias={bill.alias || 'No definido'}
+                />
+            )}
         </div>
     );
 }

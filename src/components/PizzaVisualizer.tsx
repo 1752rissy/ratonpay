@@ -40,9 +40,9 @@ export default function PizzaVisualizer({ friends }: PizzaVisualizerProps) {
                     <motion.path
                         key={friend.id}
                         d={createSlicePath(index)}
-                        fill={friend.status === 'paid' ? '#22c55e' : '#cbd5e1'} // green-500 : slate-300
-                        stroke="#fff"
-                        strokeWidth="1"
+                        fill={friend.status === 'paid' ? '#10b981' : '#27272a'} // emerald-500 : zinc-800
+                        stroke="#09090b" // zinc-950
+                        strokeWidth="2"
                         initial={{ scale: 0, opacity: 0 }}
                         animate={{ scale: 1, opacity: 1 }}
                         transition={{ delay: index * 0.1, duration: 0.5 }}
@@ -50,13 +50,13 @@ export default function PizzaVisualizer({ friends }: PizzaVisualizerProps) {
                         whileHover={{ scale: 1.05 }}
                     />
                 ))}
-                {/* Crust */}
-                <circle cx="50" cy="50" r="50" fill="none" stroke="#eab308" strokeWidth="2" className="opacity-20" />
+                {/* Crust / Outer Ring */}
+                <circle cx="50" cy="50" r="48" fill="none" stroke="#3f3f46" strokeWidth="1" className="opacity-50" />
             </svg>
 
             {/* Center text could go here if needed */}
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                <div className="bg-white/80 rounded-full px-3 py-1 text-xs font-bold backdrop-blur-sm shadow-sm">
+                <div className="bg-zinc-900/80 rounded-full px-3 py-1 text-xs font-bold backdrop-blur-sm shadow-sm border border-zinc-700 text-white">
                     {friends.filter(f => f.status === 'paid').length}/{totalSlices}
                 </div>
             </div>
