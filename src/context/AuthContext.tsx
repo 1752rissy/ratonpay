@@ -47,6 +47,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                         photoURL: currentUser.photoURL,
                         lastSeen: new Date().toISOString()
                     }, { merge: true });
+
+                    // Request Notification Permission and Save Token
+                    if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+                        const { messaging } = await import("@/lib/firebase");
+                        const { getToken } = await import("firebase/messaging");
+
+                        if (messaging) {
+                            try {
+                                const permission = await Notification.requestPermission();
+                                if (permission === 'granted') {
+                                    const token = await getToken(messaging, {
+                                        vapidKey: process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY
+                                    });
+                                    if (token) {
+                                        await setDoc(doc(db, "users", currentUser.uid), {
+                                            fcmToken: token
+                                        }, { merge: true });
+                                        console.log("FCM Token saved");
+                                    }
+                                }
+                            } catch (err) {
+                                console.error("Error getting notification token", err);
+                            }
+                        }
+                    }
+
                 } catch (error) {
                     console.error("Error syncing user to Firestore", error);
                 }

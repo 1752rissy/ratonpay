@@ -20,4 +20,11 @@ const storage = getStorage(app);
 const auth = getAuth(app);
 const googleProvider = new GoogleAuthProvider();
 
-export { db, storage, auth, googleProvider };
+let messaging: any = null;
+if (typeof window !== 'undefined') {
+    import("firebase/messaging").then(({ getMessaging }) => {
+        messaging = getMessaging(app);
+    });
+}
+
+export { db, storage, auth, googleProvider, messaging };

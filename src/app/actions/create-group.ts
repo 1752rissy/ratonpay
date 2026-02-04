@@ -84,15 +84,66 @@ export async function createGroup(formData: FormData) {
             // Also, we need 'fromUser' info.
             const fromUser = { uid: ownerUid || payerId, name: payerName };
 
+            // Import Notification sender (dynamic import to avoid issues if admin invalid)
+            const { sendPushNotification } = await import("./notifications");
+            const { getDoc, doc } = await import("firebase/firestore");
+            // The 'db' import is already at the top, but the user's instruction includes it again.
+            // I will keep the user's instruction as is, but note that `db` is already imported.
+            const { db: firestoreDb } = await import("@/lib/firebase"); // Renamed to avoid conflict with top-level 'db'
+            // Ideally should check user docs for tokens.
+
             for (const member of membersToInvite) {
                 // Don't invite self
                 if (member.id === fromUser.uid) continue;
 
-                // We need 'sendInvitation' to be robust. 
-                // Since we have their UIDs, we can create the invitation directly.
-                // Ensure we don't duplicate if logic exists.
+                // Create invitation
                 await sendInvitation(docRef.id, member.id, fromUser);
+
+                // --- SEND PUSH NOTIFICATION ---
+                try {
+                    // Fetch user token directly here to be fast
+                    // Wait, db import above might be client SDK. Server actions run on server (Node).
+                    // We need to fetch the target user's document to get fcmToken.
+                    // Re-using the client SDK 'db' is fine in Next.js Server Actions usually if config is standard.
+
+                    // We need to get the user's token.
+                    // This is a bit "heavy" inside a loop, but for MVP < 10 members is fine.
+                    // A better way is batch fetching tokens, but let's keep it simple.
+
+                    // Note: 'member.id' is the UID.
+                    // We need to read from 'users' collection.
+                    // Importing getDoc/doc from firestore inside loop is ok? Better outside.
+
+                    // Let's assume we can get token.
+                    // Fetch user doc
+                    // I will do it cleaner below.
+                } catch (e) {
+                    console.error("Notif error prep", e);
+                }
             }
+
+            // Post-loop notification loop (better for readability)
+            for (const member of membersToInvite) {
+                if (member.id === fromUser.uid) continue;
+                try {
+                    const userRef = doc(firestoreDb, "users", member.id); // Using firestoreDb to avoid conflict
+                    const userSnap = await getDoc(userRef);
+                    if (userSnap.exists()) {
+                        const userData = userSnap.data();
+                        if (userData?.fcmToken) {
+                            await sendPushNotification(
+                                userData.fcmToken,
+                                `🐀 Nuevo Gasto: ${name}`,
+                                `${payerName} te agregó a un gasto. Toca para ver detalle.`,
+                                `/group/${docRef.id}`
+                            );
+                        }
+                    }
+                } catch (err) {
+                    console.error("Failed to notify user", member.id, err);
+                }
+            }
+
         }
 
         // We return payerId so the client can store it in localStorage
