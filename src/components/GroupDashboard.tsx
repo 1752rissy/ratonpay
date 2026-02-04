@@ -33,7 +33,10 @@ interface Group {
     alias: string;
     description?: string;
     deadlineDate?: string;
+    createdAt?: string;
     members: Member[];
+    expenseReceiptUrl?: string; // Also adding this as it was used in confetti logic
+    status?: string;
 }
 
 export default function GroupDashboard({ groupId }: { groupId: string }) {
