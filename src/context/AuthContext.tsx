@@ -10,6 +10,9 @@ interface AuthContextType {
     user: User | null;
     loading: boolean;
     signInWithGoogle: () => Promise<void>;
+    registerWithEmail: (email: string, password: string, name: string) => Promise<void>;
+    loginWithEmail: (email: string, password: string) => Promise<void>;
+    signInAsGuest: (name: string) => Promise<void>;
     logout: () => Promise<void>;
 }
 
@@ -17,6 +20,9 @@ const AuthContext = createContext<AuthContextType>({
     user: null,
     loading: true,
     signInWithGoogle: async () => { },
+    registerWithEmail: async () => { },
+    loginWithEmail: async () => { },
+    signInAsGuest: async () => { },
     logout: async () => { },
 });
 
@@ -58,6 +64,71 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
     };
 
+    const registerWithEmail = async (email: string, password: string, name: string) => {
+        try {
+            const { createUserWithEmailAndPassword, updateProfile } = await import("firebase/auth");
+            const result = await createUserWithEmailAndPassword(auth, email, password);
+
+            if (result.user) {
+                await updateProfile(result.user, {
+                    displayName: name,
+                    photoURL: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`
+                });
+
+                // Sync to Firestore
+                await setDoc(doc(db, "users", result.user.uid), {
+                    uid: result.user.uid,
+                    email: email,
+                    displayName: name,
+                    searchName: name.toLowerCase(),
+                    photoURL: result.user.photoURL,
+                    lastSeen: new Date().toISOString()
+                }, { merge: true });
+            }
+        } catch (error) {
+            console.error("Error registering with email", error);
+            throw error;
+        }
+    };
+
+    const loginWithEmail = async (email: string, password: string) => {
+        try {
+            const { signInWithEmailAndPassword } = await import("firebase/auth");
+            await signInWithEmailAndPassword(auth, email, password);
+        } catch (error) {
+            console.error("Error logging in with email", error);
+            throw error;
+        }
+    };
+
+    const signInAsGuest = async (name: string) => {
+        try {
+            const { signInAnonymously, updateProfile } = await import("firebase/auth");
+            const result = await signInAnonymously(auth);
+
+            if (result.user) {
+                await updateProfile(result.user, {
+                    displayName: name,
+                    photoURL: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=10b981&color=fff`
+                });
+
+                // Force sync to Firestore immediately with correct name
+                await setDoc(doc(db, "users", result.user.uid), {
+                    uid: result.user.uid,
+                    email: null,
+                    displayName: name,
+                    searchName: name.toLowerCase(),
+                    photoURL: result.user.photoURL,
+                    lastSeen: new Date().toISOString(),
+                    isGuest: true
+                }, { merge: true });
+            }
+        } catch (error) {
+            console.error("Error signing in as guest", error);
+            throw error;
+        }
+    };
+
     const logout = async () => {
         try {
             await signOut(auth);
@@ -68,7 +139,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
 
     return (
-        <AuthContext.Provider value={{ user, loading, signInWithGoogle, logout }}>
+        <AuthContext.Provider value={{ user, loading, signInWithGoogle, registerWithEmail, loginWithEmail, signInAsGuest, logout }}>
             {children}
         </AuthContext.Provider>
     );

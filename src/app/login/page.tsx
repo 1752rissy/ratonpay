@@ -4,7 +4,7 @@ import { useAuth } from "@/context/AuthContext";
 import { Loader2 } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 export default function LoginPage() {
     const { user, loading, signInWithGoogle } = useAuth();
@@ -83,11 +83,143 @@ export default function LoginPage() {
                         </svg>
                         <span className="group-hover:text-black">Continuar con Google</span>
                     </button>
+                    <div className="relative">
+                        <div className="absolute inset-0 flex items-center">
+                            <span className="w-full border-t border-zinc-800" />
+                        </div>
+                        <div className="relative flex justify-center text-xs uppercase">
+                            <span className="bg-zinc-900 px-2 text-zinc-500">O bien</span>
+                        </div>
+                    </div>
+
+                    <EmailAuthForm />
+
                     <p className="text-xs text-zinc-600">
                         Al continuar, aceptás ser una rata responsable.
                     </p>
                 </div>
             </main>
+        </div>
+    );
+}
+
+function EmailAuthForm() {
+    const [isExpanded, setIsExpanded] = useState(false);
+    const [mode, setMode] = useState<'login' | 'register'>('login');
+    const [name, setName] = useState("");
+    const [email, setEmail] = useState("");
+    const [password, setPassword] = useState("");
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    const { registerWithEmail, loginWithEmail } = useAuth();
+    const router = useRouter();
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setError(null);
+        setLoading(true);
+
+        try {
+            if (mode === 'register') {
+                if (!name.trim()) throw new Error("El nombre es requerido");
+                await registerWithEmail(email, password, name);
+            } else {
+                await loginWithEmail(email, password);
+            }
+            router.push("/");
+        } catch (err: any) {
+            console.error(err);
+            if (err.code === 'auth/email-already-in-use') {
+                setError("Este email ya está registrado.");
+            } else if (err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password') {
+                setError("Email o contraseña incorrectos.");
+            } else if (err.code === 'auth/weak-password') {
+                setError("La contraseña es muy débil (mínimo 6 caracteres).");
+            } else {
+                setError("Ocurrió un error. Intenta nuevamente.");
+            }
+            setLoading(false);
+        }
+    };
+
+    if (!isExpanded) {
+        return (
+            <button
+                onClick={() => setIsExpanded(true)}
+                className="w-full bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold py-4 px-6 rounded-xl transition-all shadow-lg active:scale-95 text-sm"
+            >
+                Entrar con Email y Contraseña
+            </button>
+        );
+    }
+
+    return (
+        <div className="animate-in fade-in slide-in-from-top-2 bg-zinc-900 border border-zinc-800 p-6 rounded-2xl">
+            <div className="flex bg-zinc-800 p-1 rounded-lg mb-4">
+                <button
+                    onClick={() => setMode('login')}
+                    className={`flex-1 text-xs font-bold py-2 rounded-md transition-all ${mode === 'login' ? 'bg-zinc-700 text-white shadow' : 'text-zinc-500 hover:text-zinc-300'}`}
+                >
+                    Ingresar
+                </button>
+                <button
+                    onClick={() => setMode('register')}
+                    className={`flex-1 text-xs font-bold py-2 rounded-md transition-all ${mode === 'register' ? 'bg-zinc-700 text-white shadow' : 'text-zinc-500 hover:text-zinc-300'}`}
+                >
+                    Registrarse
+                </button>
+            </div>
+
+            <form onSubmit={handleSubmit} className="space-y-3">
+                {mode === 'register' && (
+                    <input
+                        type="text"
+                        placeholder="Nombre completo"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition-all placeholder:text-zinc-600 text-sm"
+                        required
+                    />
+                )}
+                <input
+                    type="email"
+                    placeholder="Tu correo electrónico"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition-all placeholder:text-zinc-600 text-sm"
+                    required
+                />
+                <input
+                    type="password"
+                    placeholder="Contraseña"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition-all placeholder:text-zinc-600 text-sm"
+                    required
+                />
+
+                {error && (
+                    <p className="text-xs text-red-500 font-medium">{error}</p>
+                )}
+
+                <button
+                    type="submit"
+                    disabled={loading}
+                    className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-3 px-6 rounded-xl transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2"
+                >
+                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                    {loading ? "Procesando..." : (mode === 'login' ? "Ingresar" : "Crear Cuenta")}
+                </button>
+            </form>
+
+            <button
+                type="button"
+                onClick={() => setIsExpanded(false)}
+                className="w-full text-center mt-4 text-xs text-zinc-500 hover:text-zinc-400 underline"
+            >
+                Cancelar
+            </button>
         </div>
     );
 }
