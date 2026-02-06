@@ -1,6 +1,7 @@
 import CreateBillForm from "@/components/CreateBillForm";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
+import { Suspense } from "react";
 
 export default function CreateBillPage() {
     return (
@@ -20,7 +21,9 @@ export default function CreateBillPage() {
                     <p className="text-zinc-500">Ingresá los detalles para dividir.</p>
                 </div>
 
-                <CreateBillForm />
+                <Suspense fallback={<div className="text-white text-center">Cargando...</div>}>
+                    <CreateBillForm />
+                </Suspense>
             </main>
         </div>
     );
