@@ -16,13 +16,19 @@ if (typeof window !== 'undefined') {
     // Add a global check to window to see if we already alerted to avoid spam
     if (!(window as any).hasAlertedFirebase) {
         const isDummy = firebaseConfig.apiKey === "AIzaSyDummyKeyForBuildProcess";
-        console.log("[Firebase Init] Config Version: 2026-02-06_15-40");
-        console.log("[Firebase Init] API Key:", firebaseConfig.apiKey);
+
+        // Use console.error for visibility even if not an error
+        console.error("[Firebase Debug] App Version: 2026-02-06_15-50");
+        console.error("[Firebase Debug] Is Dummy Key?:", isDummy);
+
+        // Log first few chars of key to verify it's not "undefined" or weird, without leaking full key
+        const key = firebaseConfig.apiKey || "";
+        console.error(`[Firebase Debug] Key Start: ${key.substring(0, 5)}... Length: ${key.length}`);
+        console.error(`[Firebase Debug] AuthDomain: ${firebaseConfig.authDomain}`);
+        console.error(`[Firebase Debug] ProjectId: ${firebaseConfig.projectId}`);
 
         if (isDummy) {
-            console.error("CRITICAL: Running with DUMMY keys.");
-            // Force an alert so the user sees it immediately
-            alert("⚠️ ERROR CRÍTICO DE CONFIGURACIÓN ⚠️\n\nLa aplicación está corriendo con claves de prueba (DUMMY KEYS).\n\nEsto significa que Vercel no está cargando las variables de entorno correctamente.\n\nPor favor, asegúrate de haber hecho REDEPLOY después de agregar las variables.");
+            alert("⚠️ ERROR CRÍTICO: Claves DUMMY detectadas. Revisa las variables de entorno en Vercel.");
         }
         (window as any).hasAlertedFirebase = true;
     }
