@@ -85,8 +85,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         try {
             await signInWithPopup(auth, googleProvider);
             // Router redirect handled by component or protected route logic
-        } catch (error) {
+        } catch (error: any) {
             console.error("Error signing in with Google", error);
+            alert(`Error al iniciar sesión: ${error.message} (${error.code})`);
         }
     };
 
