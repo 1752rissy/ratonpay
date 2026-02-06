@@ -32,7 +32,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const router = useRouter();
 
     useEffect(() => {
+        // Explicitly set persistence to LOCAL
+        import("firebase/auth").then(({ setPersistence, browserLocalPersistence }) => {
+            setPersistence(auth, browserLocalPersistence)
+                .catch(error => console.error("Error setting persistence:", error));
+        });
+
         const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+            console.log("[AuthContext] Auth State Changed:", currentUser ? "User Logged In" : "User Null");
             setUser(currentUser);
             setLoading(false);
 

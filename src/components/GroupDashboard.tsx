@@ -25,6 +25,14 @@ interface Member {
     receiptUrl?: string;
 }
 
+interface Expense {
+    id: string;
+    description: string;
+    amount: number;
+    payerId: string;
+    createdAt: string;
+}
+
 interface Group {
     id: string;
     name: string;
@@ -35,383 +43,144 @@ interface Group {
     deadlineDate?: string;
     createdAt?: string;
     members: Member[];
-    expenseReceiptUrl?: string; // Also adding this as it was used in confetti logic
+    expenseReceiptUrl?: string;
     status?: string;
+    expenses?: Expense[];
+    amount: number; // Ensure amount is defined
 }
 
 export default function GroupDashboard({ groupId }: { groupId: string }) {
-    const { user } = useAuth();
-    const [group, setGroup] = useState<Group | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
-    const [confirmModal, setConfirmModal] = useState({
-        isOpen: false,
-        title: "",
-        description: "",
-        onConfirm: () => { }
-    });
-    const [verificationModal, setVerificationModal] = useState<{ isOpen: boolean; receiptUrl: string; memberName: string; memberId: string } | null>(null);
-    const [uploadingInfo, setUploadingInfo] = useState<{ memberId: string; uploading: boolean } | null>(null);
-    const router = useRouter();
+    // ... existing state ...
 
-    const [timeLeft, setTimeLeft] = useState<string>("");
-    const [isExpired, setIsExpired] = useState(false);
+    // ... effects ...
 
-    useEffect(() => {
-        const unsub = onSnapshot(doc(db, "groups", groupId), (doc) => {
-            if (doc.exists()) {
-                setGroup({ id: doc.id, ...doc.data() } as Group);
-            }
-            setLoading(false);
-        });
+    // ... existing renders ...
 
-        return () => unsub();
-    }, [groupId]);
-
-    // Timer Logic
-    useEffect(() => {
-        if (!group?.deadlineDate) return;
-
-        const interval = setInterval(() => {
-            const now = new Date().getTime();
-            const deadline = new Date(group.deadlineDate!).getTime();
-            const distance = deadline - now;
-
-            if (distance < 0) {
-                clearInterval(interval);
-                setIsExpired(true);
-                setTimeLeft("TIEMPO AGOTADO");
-            } else {
-                const days = Math.floor(distance / (1000 * 60 * 60 * 24));
-                const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-                const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
-                const seconds = Math.floor((distance % (1000 * 60)) / 1000);
-
-                const parts = [];
-                if (days > 0) parts.push(`${days}d`);
-                parts.push(`${hours.toString().padStart(2, '0')}h`);
-                parts.push(`${minutes.toString().padStart(2, '0')}m`);
-                parts.push(`${seconds.toString().padStart(2, '0')}s`);
-
-                setTimeLeft(parts.join(' : '));
-            }
-        }, 1000);
-
-        return () => clearInterval(interval);
-    }, [group?.deadlineDate]);
-
-    // Check if I am admin (payer/creator)
-    const isAdmin = user && (user.uid === group?.payerId || (group as any)?.createdBy === user.uid);
-
-    async function handleTogglePayment(memberId: string, currentStatus: string | undefined) {
-        if (!isAdmin) return;
-        const isPaid = currentStatus === 'paid';
-        await togglePaymentStatus(groupId, memberId, !isPaid);
-    }
-
-    async function handleUploadProof(event: React.ChangeEvent<HTMLInputElement>, memberId: string) {
-        const file = event.target.files?.[0];
-        if (!file || !user) return;
-
-        // Limits
-        if (file.size > 5 * 1024 * 1024) {
-            alert("El archivo es muy grande (Max 5MB)");
-            return;
-        }
-
-        setUploadingInfo({ memberId, uploading: true });
-
-        try {
-            const storageRef = ref(storage, `receipts/${groupId}/${memberId}_${Date.now()}`);
-            await uploadBytes(storageRef, file);
-            const url = await getDownloadURL(storageRef);
-
-            await uploadPaymentProof(groupId, memberId, url);
-        } catch (error) {
-            console.error("Upload failed", error);
-            alert("Error al subir imagen");
-        } finally {
-            setUploadingInfo(null);
-        }
-    }
-
-    async function handleVerify(approved: boolean) {
-        if (!verificationModal) return;
-        await verifyPaymentProof(groupId, verificationModal.memberId, approved);
-    }
-
-    const [pendingInvitesCount, setPendingInvitesCount] = useState(0);
-    useEffect(() => {
-        import("@/app/actions/invitations").then(({ getGroupPendingInvitationsCount }) => {
-            getGroupPendingInvitationsCount(groupId).then(res => {
-                if (res.success) setPendingInvitesCount(res.count);
-            });
-        });
-    }, [groupId]);
-
-    // Confetti Effect for All Paid AND Admin Receipt Uploaded
-    useEffect(() => {
-        if (!group) return;
-        const isAllMembersPaid = group.members
-            .filter(m => m.id !== group.payerId)
-            .every(m => m.status === 'paid');
-
-        // Confetti only if everyone paid AND Admin uploaded the final receipt
-        const isFullyCompleted = isAllMembersPaid && (group as any).expenseReceiptUrl;
-
-        if (isFullyCompleted && group.members.length > 1) { // Ensure actionable group
-            import("canvas-confetti").then((confetti) => {
-                const duration = 3 * 1000;
-                const animationEnd = Date.now() + duration;
-                const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 0 };
-
-                const random = (min: number, max: number) => Math.random() * (max - min) + min;
-
-                const interval: any = setInterval(function () {
-                    const timeLeft = animationEnd - Date.now();
-
-                    if (timeLeft <= 0) {
-                        return clearInterval(interval);
-                    }
-
-                    const particleCount = 50 * (timeLeft / duration);
-                    // since particles fall down, start a bit higher than random
-                    confetti.default({ ...defaults, particleCount, origin: { x: random(0.1, 0.3), y: Math.random() - 0.2 } });
-                    confetti.default({ ...defaults, particleCount, origin: { x: random(0.7, 0.9), y: Math.random() - 0.2 } });
-                }, 250);
-            });
-        }
-    }, [group]);
-
-    if (loading) return <div className="flex justify-center p-12"><Loader2 className="animate-spin w-8 h-8 text-slate-400" /></div>;
-    if (!group) return <div className="flex justify-center p-12">Grupo no encontrado</div>;
-
-    // Ranking Logic
-    // Filter out payer from members list? User wants to see them now.
-    // const visibleMembers = group.members.filter(m => m.id !== group.payerId);
-    const visibleMembers = group.members; // Show everyone including payer
-
-    // Ranking Logic
-    const paidMembers = group.members.filter(m => m.status === 'paid' && m.paidAt).sort((a, b) => new Date(a.paidAt!).getTime() - new Date(b.paidAt!).getTime());
-
-    // Debtors only appear after deadline
-    // Exclude payer from pending/debtors lists strictly
-    const pendingMembers = group.members.filter(m => m.status !== 'paid' && m.id !== group.payerId);
-    const debtors = isExpired ? pendingMembers : [];
-
-    return (
-        <div className="space-y-8 pb-20">
-            {/* Header Section with Gradient */}
-            <div className="relative -mx-6 -mt-6 p-8 pb-12 overflow-hidden">
-                <div className="absolute inset-0 bg-gradient-to-b from-purple-900/20 to-zinc-950 z-0"></div>
-                <div className="absolute top-[-20%] right-[-10%] w-[300px] h-[300px] bg-emerald-500/10 rounded-full blur-[80px]"></div>
-
-                <div className="relative z-10 space-y-6">
-                    <div className="flex items-center justify-between">
-                        <Link href="/" className="text-zinc-400 hover:text-white transition-colors flex items-center gap-2 group">
-                            <ArrowLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
-                            <span className="text-sm font-medium">Volver</span>
-                        </Link>
-                        {isAdmin && (
-                            <span className="bg-purple-500/20 text-purple-300 text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider border border-purple-500/30">
-                                Administrador
-                            </span>
-                        )}
-                    </div>
-
+    {
+        (group as any).amount > 0 && (
+            <div className="col-span-2 border-t border-zinc-800 pt-4 mt-2 mb-2">
+                <div className="flex items-center justify-between">
                     <div>
-                        <h1 className="text-5xl md:text-6xl font-black text-white tracking-tighter drop-shadow-2xl mb-2">{group.name}</h1>
-                        {group.description && (
-                            <p className="text-zinc-400 text-lg max-w-2xl">{group.description}</p>
-                        )}
+                        <p className="text-zinc-500 text-xs uppercase tracking-wider mb-0.5">Monto Total</p>
+                        <p className="text-3xl font-black text-white tracking-tight">
+                            $ {(group as any).amount.toLocaleString()}
+                        </p>
                     </div>
-
-                    <div className="flex flex-wrap items-center gap-3 pt-2">
-                        <div className="bg-zinc-900/50 backdrop-blur-md border border-zinc-800 px-4 py-2 rounded-xl flex items-center gap-2">
-                            <Users className="w-4 h-4 text-purple-400" />
-                            <span className="text-sm font-bold text-white">{group.members.length}</span>
-                            <span className="text-xs text-zinc-500 font-medium uppercase tracking-wide">Miembros</span>
-                        </div>
-
-                        {/* Timer Badge */}
-                        {group.deadlineDate && (
-                            <div className={cn(
-                                "flex items-center gap-3 px-4 py-2 rounded-xl border backdrop-blur-md transition-all",
-                                isExpired
-                                    ? "bg-red-500/10 border-red-500/30 text-red-500 shadow-[0_0_15px_rgba(239,68,68,0.2)] animate-pulse"
-                                    : "bg-emerald-500/10 border-emerald-500/20 text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.1)]"
-                            )}>
-                                {isExpired ? <AlertTriangle className="w-4 h-4" /> : <Clock className="w-4 h-4" />}
-                                <div className="flex flex-col leading-none">
-                                    <span className="text-[10px] opacity-70 font-bold uppercase tracking-wider">Tiempo Restante</span>
-                                    <span className="font-mono font-bold text-sm tracking-widest">{timeLeft}</span>
-                                </div>
+                    {group.members.length > 0 && (
+                        <div className="text-right">
+                            <p className="text-zinc-500 text-xs uppercase tracking-wider mb-0.5">C/U Debe Pagar</p>
+                            <div className="flex items-center justify-end gap-1 text-emerald-400">
+                                <span className="text-xl font-bold font-mono">
+                                    $ {Math.ceil((group as any).amount / group.members.length).toLocaleString()}
+                                </span>
                             </div>
-                        )}
+                            <p className="text-[10px] text-zinc-600 mt-1">
+                                (Dividido entre {group.members.length} personas)
+                            </p>
+                        </div>
+                    )}
+                </div>
+
+                {/* Expenses List */}
+                {group.expenses && group.expenses.length > 0 && (
+                    <div className="mt-4 space-y-2">
+                        <p className="text-zinc-500 text-xs uppercase tracking-wider font-bold">Detalle de Gastos</p>
+                        <div className="bg-zinc-950/30 rounded-lg p-2 space-y-2">
+                            {group.expenses.map((expense) => (
+                                <div key={expense.id} className="flex justify-between items-center text-sm border-b border-zinc-800/50 pb-1 last:border-0 last:pb-0">
+                                    <span className="text-zinc-300">{expense.description}</span>
+                                    <span className="font-mono text-zinc-400">$ {expense.amount.toLocaleString()}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+            </div>
+        )
+    }
+
+    {/* Creator Actions: Upload Total Receipt */ }
+    <div className="col-span-2 flex items-center justify-between border-t border-zinc-800 pt-4">
+        {(group as any).expenseReceiptUrl ? (
+            <a
+                href={(group as any).expenseReceiptUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 text-emerald-400 hover:text-emerald-300 transition-colors text-xs font-bold uppercase tracking-wider px-3 py-2 bg-emerald-900/10 rounded-lg border border-emerald-500/20"
+            >
+                <FileText className="w-4 h-4" />
+                Ver Comprobante del Gasto
+            </a>
+        ) : (
+            <div className="flex items-center gap-2 text-zinc-500 text-xs italic">
+                <AlertCircle className="w-4 h-4" />
+                <span>Falta comprobante general</span>
+            </div>
+        )}
+
+        {isAdmin && !(group as any).expenseReceiptUrl && (
+            <div className="relative">
+                <input
+                    disabled={uploadingInfo?.uploading}
+                    id="upload-expense-receipt"
+                    type="file"
+                    accept="image/*"
+                    onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+
+                        setUploadingInfo({ memberId: 'admin-receipt', uploading: true });
+                        try {
+                            const storageRef = ref(storage, `receipts/${groupId}/EXPENSE_TOTAL_${Date.now()}`);
+                            await uploadBytes(storageRef, file);
+                            const url = await getDownloadURL(storageRef);
+
+                            const { uploadExpenseReceipt } = await import("@/app/actions/invitations");
+                            await uploadExpenseReceipt(groupId, url);
+                        } catch (err) {
+                            console.error(err);
+                            alert("Error al subir comprobante");
+                        } finally {
+                            setUploadingInfo(null);
+                        }
+                    }}
+                    className="hidden"
+                />
+                <label
+                    htmlFor="upload-expense-receipt"
+                    className="cursor-pointer flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-xs font-bold transition-all shadow-lg hover:shadow-purple-500/20"
+                >
+                    {uploadingInfo?.memberId === 'admin-receipt' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                    Subir Ticket Total
+                </label>
+            </div>
+        )}
+    </div>
+                        </div >
+                    </div >
+
+        {/* Payment Info Card */ }
+        < div className = "bg-zinc-900/30 border border-zinc-800 p-6 rounded-3xl flex flex-col sm:flex-row sm:items-center justify-between gap-4" >
+            <div>
+                <p className="text-zinc-500 text-xs font-bold uppercase tracking-widest mb-1">Se le paga a:</p>
+                <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-purple-500/20 flex items-center justify-center text-purple-400 font-bold border border-purple-500/30">
+                        {group.payerName.charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                        <p className="text-white font-bold text-lg leading-tight">{group.payerName}</p>
+                        <div className="flex items-center gap-2">
+                            <p className="text-emerald-400 font-mono text-sm">{group.alias}</p>
+                            <CopyButton text={group.alias} />
+                        </div>
                     </div>
                 </div>
             </div>
 
-            {/* Pending Members Warning Banner */}
-            {pendingInvitesCount > 0 && (
-                <div className="mx-0 mb-6 bg-yellow-500/10 border border-yellow-500/20 p-4 rounded-xl flex items-start gap-3 relative z-20 animate-in fade-in slide-in-from-top-2">
-                    <div className="p-2 bg-yellow-500/10 rounded-full text-yellow-500 shrink-0">
-                        <Users className="w-5 h-5" />
-                    </div>
-                    <div>
-                        <h3 className="text-yellow-500 font-bold text-sm uppercase tracking-wide mb-1">
-                            Faltan {pendingInvitesCount} invitados por unirse
-                        </h3>
-                        <p className="text-zinc-400 text-xs leading-relaxed">
-                            Te recomendamos <strong>esperar a que todos acepten</strong> la invitación antes de realizar tu pago, para asegurar que el monto final sea correcto.
-                        </p>
-                    </div>
-                </div>
-            )}
+                    </div >
 
-            {/* Main Content Info */}
-            <div className="grid lg:grid-cols-3 gap-8 relative z-10">
-
-                {/* Left Column: Details & Members */}
-                <div className="lg:col-span-2 space-y-6">
-
-                    {/* Expense Details Card */}
-                    <div className="bg-zinc-900/50 border border-zinc-800 p-6 rounded-3xl relative overflow-hidden">
-                        <div className="absolute top-0 right-0 p-6 opacity-5 pointer-events-none">
-                            <FileText className="w-32 h-32 text-emerald-500" />
-                        </div>
-
-                        <h2 className="text-zinc-500 text-xs font-bold uppercase tracking-widest mb-4 flex items-center gap-2">
-                            <FileText className="w-4 h-4" />
-                            Detalle del Gasto
-                        </h2>
-
-                        <div className="grid sm:grid-cols-2 gap-6 relative z-10">
-                            <div>
-                                <p className="text-zinc-500 text-xs mb-1">Concepto</p>
-                                <p className="text-white font-bold text-xl">{group.name}</p>
-                            </div>
-
-                            <div>
-                                <p className="text-zinc-500 text-xs mb-1">Fecha</p>
-                                <p className="text-white font-medium">
-                                    {new Date(group.createdAt as any).toLocaleDateString('es-AR', {
-                                        weekday: 'long',
-                                        year: 'numeric',
-                                        month: 'long',
-                                        day: 'numeric'
-                                    })}
-                                </p>
-                            </div>
-
-                            {(group as any).amount > 0 && (
-                                <div className="col-span-2 border-t border-zinc-800 pt-4 mt-2 mb-2">
-                                    <div className="flex items-center justify-between">
-                                        <div>
-                                            <p className="text-zinc-500 text-xs uppercase tracking-wider mb-0.5">Monto Total</p>
-                                            <p className="text-3xl font-black text-white tracking-tight">
-                                                $ {(group as any).amount.toLocaleString()}
-                                            </p>
-                                        </div>
-                                        {group.members.length > 0 && (
-                                            <div className="text-right">
-                                                <p className="text-zinc-500 text-xs uppercase tracking-wider mb-0.5">C/U Debe Pagar</p>
-                                                <div className="flex items-center justify-end gap-1 text-emerald-400">
-                                                    <span className="text-xl font-bold font-mono">
-                                                        $ {Math.ceil((group as any).amount / group.members.length).toLocaleString()}
-                                                    </span>
-                                                </div>
-                                                <p className="text-[10px] text-zinc-600 mt-1">
-                                                    (Dividido entre {group.members.length} personas)
-                                                </p>
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Creator Actions: Upload Total Receipt */}
-                            <div className="col-span-2 flex items-center justify-between border-t border-zinc-800 pt-4">
-                                {(group as any).expenseReceiptUrl ? (
-                                    <a
-                                        href={(group as any).expenseReceiptUrl}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="flex items-center gap-2 text-emerald-400 hover:text-emerald-300 transition-colors text-xs font-bold uppercase tracking-wider px-3 py-2 bg-emerald-900/10 rounded-lg border border-emerald-500/20"
-                                    >
-                                        <FileText className="w-4 h-4" />
-                                        Ver Comprobante del Gasto
-                                    </a>
-                                ) : (
-                                    <div className="flex items-center gap-2 text-zinc-500 text-xs italic">
-                                        <AlertCircle className="w-4 h-4" />
-                                        <span>Falta comprobante general</span>
-                                    </div>
-                                )}
-
-                                {isAdmin && !(group as any).expenseReceiptUrl && (
-                                    <div className="relative">
-                                        <input
-                                            disabled={uploadingInfo?.uploading}
-                                            id="upload-expense-receipt"
-                                            type="file"
-                                            accept="image/*"
-                                            onChange={async (e) => {
-                                                const file = e.target.files?.[0];
-                                                if (!file) return;
-
-                                                setUploadingInfo({ memberId: 'admin-receipt', uploading: true });
-                                                try {
-                                                    const storageRef = ref(storage, `receipts/${groupId}/EXPENSE_TOTAL_${Date.now()}`);
-                                                    await uploadBytes(storageRef, file);
-                                                    const url = await getDownloadURL(storageRef);
-
-                                                    const { uploadExpenseReceipt } = await import("@/app/actions/invitations");
-                                                    await uploadExpenseReceipt(groupId, url);
-                                                } catch (err) {
-                                                    console.error(err);
-                                                    alert("Error al subir comprobante");
-                                                } finally {
-                                                    setUploadingInfo(null);
-                                                }
-                                            }}
-                                            className="hidden"
-                                        />
-                                        <label
-                                            htmlFor="upload-expense-receipt"
-                                            className="cursor-pointer flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-xs font-bold transition-all shadow-lg hover:shadow-purple-500/20"
-                                        >
-                                            {uploadingInfo?.memberId === 'admin-receipt' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-                                            Subir Ticket Total
-                                        </label>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Payment Info Card */}
-                    <div className="bg-zinc-900/30 border border-zinc-800 p-6 rounded-3xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                        <div>
-                            <p className="text-zinc-500 text-xs font-bold uppercase tracking-widest mb-1">Se le paga a:</p>
-                            <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-full bg-purple-500/20 flex items-center justify-center text-purple-400 font-bold border border-purple-500/30">
-                                    {group.payerName.charAt(0).toUpperCase()}
-                                </div>
-                                <div>
-                                    <p className="text-white font-bold text-lg leading-tight">{group.payerName}</p>
-                                    <div className="flex items-center gap-2">
-                                        <p className="text-emerald-400 font-mono text-sm">{group.alias}</p>
-                                        <CopyButton text={group.alias} />
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                    </div>
-
-                    {/* Members List */}
-                    <div className="bg-zinc-900/50 backdrop-blur-md border border-zinc-800 rounded-3xl overflow-hidden">
+        {/* Members List */ }
+        < div className = "bg-zinc-900/50 backdrop-blur-md border border-zinc-800 rounded-3xl overflow-hidden" >
                         <div className="p-6 border-b border-zinc-800 flex justify-between items-center bg-zinc-900/50">
                             <div>
                                 <h2 className="font-bold text-xl text-white">Miembros</h2>
@@ -534,19 +303,21 @@ export default function GroupDashboard({ groupId }: { groupId: string }) {
                                 </div>
                             ))}
                         </div>
-                    </div>
+                    </div >
 
-                    {/* Pending Invitations Management (Admin Only) */}
-                    {isAdmin && (
-                        <PendingInvitationsList groupId={groupId} currentUserId={user?.uid} />
-                    )}
-                </div>
+        {/* Pending Invitations Management (Admin Only) */ }
+    {
+        isAdmin && (
+            <PendingInvitationsList groupId={groupId} currentUserId={user?.uid} />
+        )
+    }
+                </div >
 
-                {/* Right Column: Rankings & Actions */}
-                <div className="space-y-6">
+        {/* Right Column: Rankings & Actions */ }
+        < div className = "space-y-6" >
 
-                    {/* Velocistas Card */}
-                    <div className="bg-gradient-to-br from-zinc-900 to-zinc-950 p-6 rounded-3xl border border-zinc-800 shadow-xl relative overflow-hidden group">
+            {/* Velocistas Card */ }
+            < div className = "bg-gradient-to-br from-zinc-900 to-zinc-950 p-6 rounded-3xl border border-zinc-800 shadow-xl relative overflow-hidden group" >
                         <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
                             <Trophy className="w-24 h-24 text-yellow-500 rotate-12" />
                         </div>
@@ -579,10 +350,10 @@ export default function GroupDashboard({ groupId }: { groupId: string }) {
                                 </div>
                             )}
                         </div>
-                    </div>
+                    </div >
 
-                    {/* Deudores Card */}
-                    <div className="bg-gradient-to-br from-red-950/20 to-zinc-950 p-6 rounded-3xl border border-red-900/20 shadow-xl relative overflow-hidden">
+        {/* Deudores Card */ }
+        < div className = "bg-gradient-to-br from-red-950/20 to-zinc-950 p-6 rounded-3xl border border-red-900/20 shadow-xl relative overflow-hidden" >
                         <div className="absolute -bottom-4 -right-4 opacity-5">
                             <Turtle className="w-32 h-32 text-red-500" />
                         </div>
@@ -626,39 +397,44 @@ export default function GroupDashboard({ groupId }: { groupId: string }) {
                                 </div>
                             )}
                         </div>
-                    </div>
-                </div>
+                    </div >
+                </div >
+            </div >
+
+        { isAdmin && (
+            <div className="sticky bottom-6 z-30">
+                <button
+                    onClick={() => {
+                        router.push(`/create?groupId=${groupId}`);
+                    }}
+                    className="w-full bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-black py-4 px-6 rounded-2xl flex items-center justify-center gap-3 transition-all shadow-[0_10px_40px_rgba(16,185,129,0.3)] hover:shadow-[0_10px_50px_rgba(16,185,129,0.5)] active:scale-[0.98] border-t border-white/20"
+                >
+                    <Plus className="w-6 h-6" />
+                    <span className="text-lg uppercase tracking-wide">Nuevo Gasto</span>
+                </button>
             </div>
+        )
+}
 
-            {isAdmin && (
-                <div className="sticky bottom-6 z-30">
-                    <button
-                        onClick={() => {
-                            router.push(`/create?groupId=${groupId}`);
-                        }}
-                        className="w-full bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-black py-4 px-6 rounded-2xl flex items-center justify-center gap-3 transition-all shadow-[0_10px_40px_rgba(16,185,129,0.3)] hover:shadow-[0_10px_50px_rgba(16,185,129,0.5)] active:scale-[0.98] border-t border-white/20"
-                    >
-                        <Plus className="w-6 h-6" />
-                        <span className="text-lg uppercase tracking-wide">Nuevo Gasto</span>
-                    </button>
-                </div>
-            )}
+{
+    isInviteModalOpen && (
+        <InviteMemberModal groupId={groupId} onClose={() => setIsInviteModalOpen(false)} />
+    )
+}
 
-            {isInviteModalOpen && (
-                <InviteMemberModal groupId={groupId} onClose={() => setIsInviteModalOpen(false)} />
-            )}
+{
+    verificationModal && (
+        <PaymentVerificationModal
+            isOpen={verificationModal.isOpen}
+            receiptUrl={verificationModal.receiptUrl}
+            memberName={verificationModal.memberName}
+            onClose={() => setVerificationModal(null)}
+            onVerify={handleVerify}
+        />
+    )
+}
 
-            {verificationModal && (
-                <PaymentVerificationModal
-                    isOpen={verificationModal.isOpen}
-                    receiptUrl={verificationModal.receiptUrl}
-                    memberName={verificationModal.memberName}
-                    onClose={() => setVerificationModal(null)}
-                    onVerify={handleVerify}
-                />
-            )}
-
-            {/* Leave Group Action */}
+{/* Leave Group Action */ }
             <div className="flex justify-center mt-12 mb-8">
                 <button
                     onClick={() => {
@@ -699,7 +475,7 @@ export default function GroupDashboard({ groupId }: { groupId: string }) {
                 onConfirm={confirmModal.onConfirm}
                 onCancel={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
             />
-        </div>
+        </div >
     );
 }
 

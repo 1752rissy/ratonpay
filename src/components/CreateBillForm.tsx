@@ -4,10 +4,11 @@ import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { createGroup } from "@/app/actions/create-group"; // Updated import
+import { createGroup } from "@/app/actions/create-group";
+import { addExpense } from "@/app/actions/add-expense"; // Imported new action
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { useAuth } from "@/context/AuthContext"; // Import Auth
+import { useAuth } from "@/context/AuthContext";
 
 export default function CreateBillForm() {
     const { user } = useAuth();
@@ -17,7 +18,7 @@ export default function CreateBillForm() {
 
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [groupData, setGroupData] = useState<any>(null); // Re-adding state variables that were lost
+    const [groupData, setGroupData] = useState<any>(null);
 
     useEffect(() => {
         if (groupId) {
@@ -35,44 +36,56 @@ export default function CreateBillForm() {
         setError(null);
 
         const formData = new FormData(e.currentTarget);
-
-        // Add User Context
-        if (user) {
-            formData.append("ownerUid", user.uid);
-            formData.append("ownerEmail", user.email || "");
-            formData.append("payerName", user.displayName || "Usuario");
-        } else {
-            // Fallback or require login? For recycling group, user MUST be logged in usually.
-            // If manual, maybe not.
-            if (!formData.get("payerName")) formData.append("payerName", "Anónimo");
-        }
-
-        // Mapping fields to createGroup expectation
-        // createGroup expects: name (which is description here?), payerName, alias, description
-        // Form has: description, alias, amount
-        formData.append("name", formData.get("description") as string); // Mapping description to Name 
-
-        // Pass existing members if recycling
-        if (groupData && groupData.members) {
-            formData.append("existingMembers", JSON.stringify(groupData.members));
-        }
-
-        // Time Limit Default (24h for now or add selector?)
-        formData.append("timeLimit", "24h");
+        const description = formData.get("description") as string;
+        const amountStr = formData.get("amount");
+        const amount = amountStr ? parseFloat(amountStr as string) : 0;
 
         try {
-            const result = await createGroup(formData);
+            if (groupId) {
+                // ADDING EXPENSE TO EXISTING GROUP
+                if (!user) throw new Error("Debes estar logueado");
 
-            if (result.success) {
-                // If we recycled group, maybe we want to redirect to the new group
-                router.push(`/group/${result.groupId}`);
+                const result = await addExpense(groupId, {
+                    description,
+                    amount,
+                    payerId: user.uid
+                });
+
+                if (result.success) {
+                    router.push(`/group/${groupId}`);
+                } else {
+                    setError(result.error || "Error al agregar gasto");
+                    setLoading(false);
+                }
             } else {
-                setError(result.error || "Algo salió mal");
-                setLoading(false);
+                // CREATING NEW GROUP
+                // Add User Context
+                if (user) {
+                    formData.append("ownerUid", user.uid);
+                    formData.append("ownerEmail", user.email || "");
+                    formData.append("payerName", user.displayName || "Usuario");
+                } else {
+                    if (!formData.get("payerName")) formData.append("payerName", "Anónimo");
+                }
+
+                // Mapping fields to createGroup expectation
+                formData.append("name", description);
+
+                // Time Limit Default
+                formData.append("timeLimit", "24h");
+
+                const result = await createGroup(formData);
+
+                if (result.success) {
+                    router.push(`/group/${result.groupId}`);
+                } else {
+                    setError(result.error || "Algo salió mal");
+                    setLoading(false);
+                }
             }
-        } catch (err) {
+        } catch (err: any) {
             console.error(err);
-            setError("Error de conexión");
+            setError(err.message || "Error de conexión");
             setLoading(false);
         }
     }
@@ -96,20 +109,22 @@ export default function CreateBillForm() {
                     />
                 </div>
 
-                <div>
-                    <label htmlFor="alias" className="block text-xs font-mono font-medium text-emerald-500/80 mb-2 uppercase tracking-wider">
-                        Alias para recibir
-                    </label>
-                    <input
-                        type="text"
-                        id="alias"
-                        name="alias"
-                        required
-                        placeholder="tu.alias.mp"
-                        className="w-full px-4 py-3 rounded-xl bg-zinc-950 border border-zinc-800 text-white font-mono placeholder-zinc-600 focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition-all outline-none"
-                        defaultValue={groupData?.alias}
-                    />
-                </div>
+                {!groupId && (
+                    <div>
+                        <label htmlFor="alias" className="block text-xs font-mono font-medium text-emerald-500/80 mb-2 uppercase tracking-wider">
+                            Alias para recibir
+                        </label>
+                        <input
+                            type="text"
+                            id="alias"
+                            name="alias"
+                            required={!groupId}
+                            placeholder="tu.alias.mp"
+                            className="w-full px-4 py-3 rounded-xl bg-zinc-950 border border-zinc-800 text-white font-mono placeholder-zinc-600 focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition-all outline-none"
+                            defaultValue={groupData?.alias}
+                        />
+                    </div>
+                )}
 
                 <div>
                     <label htmlFor="amount" className="block text-xs font-mono font-medium text-emerald-500/80 mb-2 uppercase tracking-wider">
@@ -126,7 +141,18 @@ export default function CreateBillForm() {
                     />
                 </div>
 
-                {groupData ? (
+                {groupId && groupData && (
+                    <div className="bg-emerald-500/10 border border-emerald-500/20 p-4 rounded-xl">
+                        <p className="text-sm text-emerald-400 font-bold mb-1">
+                            Agregando a: {groupData.name}
+                        </p>
+                        <p className="text-xs text-zinc-400">
+                            Este gasto se sumará al total del grupo.
+                        </p>
+                    </div>
+                )}
+
+                {!groupId && (groupData ? (
                     <div className="bg-zinc-950/50 border border-zinc-800 p-4 rounded-xl space-y-2">
                         <div className="flex items-center justify-between text-zinc-300">
                             <span className="text-sm">Se invitará a los mismos miembros:</span>
@@ -145,7 +171,7 @@ export default function CreateBillForm() {
                             Podrás invitar amigos con un link o por WhatsApp una vez creado el gasto.
                         </p>
                     </div>
-                )}
+                ))}
             </div>
 
             {error && (
