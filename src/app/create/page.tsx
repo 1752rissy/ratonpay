@@ -2,11 +2,7 @@ import { Suspense } from "react";
 import CreateBillForm from "@/components/CreateBillForm";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
-import { SearchParamsWrapper } from "@/components/SearchParamsWrapper";
 
-// Using a Client Component wrapper for title logic or simple conditional rendering inside proper context
-// But `searchParams` in page.tsx are available as prop in server component.
-// Let's keep it simple. The user wants the page title to reflect context.
 
 export default async function CreateBillPage(props: { searchParams: Promise<{ groupId?: string }> }) {
     const searchParams = await props.searchParams;
