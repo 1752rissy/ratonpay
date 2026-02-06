@@ -14,6 +14,7 @@ const firebaseConfig = {
 // Debugging: Log if we are using the fallback key
 if (typeof window !== 'undefined') {
     const isDummy = firebaseConfig.apiKey === "AIzaSyDummyKeyForBuildProcess";
+    console.log("[Firebase Init] Config Version: 2026-02-06_15-30");
     console.log("[Firebase Init] Using API Key type:", isDummy ? "DUMMY (Fallback)" : "REAL (Environment Variable)");
     if (isDummy) {
         console.error("CRITICAL: The application is running with a placeholder API Key. Check Vercel Environment Variables.");
