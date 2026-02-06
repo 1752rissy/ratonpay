@@ -11,6 +11,15 @@ const firebaseConfig = {
     appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || "1:123456789:web:abcdef",
 };
 
+// Debugging: Log if we are using the fallback key
+if (typeof window !== 'undefined') {
+    const isDummy = firebaseConfig.apiKey === "AIzaSyDummyKeyForBuildProcess";
+    console.log("[Firebase Init] Using API Key type:", isDummy ? "DUMMY (Fallback)" : "REAL (Environment Variable)");
+    if (isDummy) {
+        console.error("CRITICAL: The application is running with a placeholder API Key. Check Vercel Environment Variables.");
+    }
+}
+
 import { getStorage } from "firebase/storage";
 
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
