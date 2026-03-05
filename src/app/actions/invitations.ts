@@ -26,7 +26,7 @@ export async function getUserGroups(userId: string) {
 
 // Status: 'pending' | 'pending_approval' | 'paid'
 
-export async function uploadPaymentProof(groupId: string, memberId: string, receiptUrl: string) {
+export async function uploadPaymentProof(groupId: string, memberId: string, receiptUrl: string, expenseId: string = 'initial') {
     try {
         const groupRef = doc(db, "groups", groupId);
         const groupSnap = await getDoc(groupRef);
@@ -36,17 +36,28 @@ export async function uploadPaymentProof(groupId: string, memberId: string, rece
         const groupData = groupSnap.data();
         const updatedMembers = (groupData.members || []).map((m: any) => {
             if (m.id === memberId) {
+                const payments = m.payments || {};
                 return {
                     ...m,
-                    status: 'pending_approval',
-                    receiptUrl: receiptUrl,
-                    submittedAt: new Date().toISOString()
+                    // Legacy support
+                    status: expenseId === 'initial' ? 'pending_approval' : m.status,
+                    receiptUrl: expenseId === 'initial' ? receiptUrl : m.receiptUrl,
+                    // New multi-payment support
+                    payments: {
+                        ...payments,
+                        [expenseId]: {
+                            status: 'pending_approval',
+                            receiptUrl: receiptUrl,
+                            submittedAt: new Date().toISOString()
+                        }
+                    }
                 };
             }
             return m;
         });
 
-        await updateDoc(groupRef, { members: updatedMembers });
+        const sanitizedMembers = JSON.parse(JSON.stringify(updatedMembers));
+        await updateDoc(groupRef, { members: sanitizedMembers });
         return { success: true };
     } catch (error) {
         console.error("Error uploading proof:", error);
@@ -68,7 +79,7 @@ export async function uploadExpenseReceipt(groupId: string, receiptUrl: string) 
     }
 }
 
-export async function verifyPaymentProof(groupId: string, memberId: string, approved: boolean) {
+export async function verifyPaymentProof(groupId: string, memberId: string, approved: boolean, expenseId: string = 'initial') {
     try {
         const groupRef = doc(db, "groups", groupId);
         const groupSnap = await getDoc(groupRef);
@@ -78,17 +89,66 @@ export async function verifyPaymentProof(groupId: string, memberId: string, appr
         const groupData = groupSnap.data();
         const updatedMembers = (groupData.members || []).map((m: any) => {
             if (m.id === memberId) {
+                const payments = m.payments || {};
+                const currentPayment = payments[expenseId] || {};
+
+                const newStatus = approved ? 'paid' : 'pending';
+                const newPaidAt = approved ? new Date().toISOString() : null;
+
                 return {
                     ...m,
-                    status: approved ? 'paid' : 'pending', // Revert to pending if rejected
-                    paidAt: approved ? new Date().toISOString() : null, // Set paidAt only if approved
-                    receiptUrl: approved ? m.receiptUrl : null // Keep URL if paid (record), remove if rejected (cleanup)? Let's keep it generally but for rejection logic maybe plain pending is better.
+                    // Legacy support
+                    status: expenseId === 'initial' ? newStatus : m.status,
+                    paidAt: expenseId === 'initial' ? newPaidAt : m.paidAt,
+                    receiptUrl: expenseId === 'initial' ? (approved ? m.receiptUrl : null) : m.receiptUrl,
+                    // New multi-payment support
+                    payments: {
+                        ...payments,
+                        [expenseId]: {
+                            ...currentPayment,
+                            status: newStatus,
+                            paidAt: newPaidAt,
+                            receiptUrl: approved ? currentPayment.receiptUrl : null
+                        }
+                    }
                 };
             }
             return m;
         });
 
-        await updateDoc(groupRef, { members: updatedMembers });
+        const sanitizedMembers = JSON.parse(JSON.stringify(updatedMembers));
+        await updateDoc(groupRef, { members: sanitizedMembers });
+
+        // Send push notification based on approval status
+        try {
+            const userRef = doc(db, "users", memberId);
+            const userSnap = await getDoc(userRef);
+            if (userSnap.exists()) {
+                const userData = userSnap.data();
+                if (userData?.fcmToken) {
+                    const { sendPushNotification } = await import("./notifications");
+
+                    if (approved) {
+                        await sendPushNotification(
+                            userData.fcmToken,
+                            `✅ Pago Validado`,
+                            `Tu comprobante en ${groupData.name} ha sido aprobado. ¡Gracias!`,
+                            `/group/${groupId}`
+                        );
+                    } else {
+                        await sendPushNotification(
+                            userData.fcmToken,
+                            `❌ Pago Rechazado`,
+                            `Tu comprobante en ${groupData.name} fue rechazado. Por favor, vuelve a subirlo.`,
+                            `/group/${groupId}`
+                        );
+                    }
+                }
+            }
+        } catch (notifyError) {
+            console.error("Failed to send verification notification", notifyError);
+        }
+
         return { success: true };
     } catch (error) {
         console.error("Error verifying proof:", error);
@@ -96,7 +156,7 @@ export async function verifyPaymentProof(groupId: string, memberId: string, appr
     }
 }
 
-export async function togglePaymentStatus(groupId: string, memberId: string, isPaid: boolean) {
+export async function togglePaymentStatus(groupId: string, memberId: string, isPaid: boolean, expenseId: string = 'initial') {
     try {
         const groupRef = doc(db, "groups", groupId);
         const groupSnap = await getDoc(groupRef);
@@ -109,17 +169,31 @@ export async function togglePaymentStatus(groupId: string, memberId: string, isP
 
         const updatedMembers = (groupData.members || []).map((m: any) => {
             if (m.id === memberId) {
+                const payments = m.payments || {};
+                const newStatus = isPaid ? 'paid' : 'pending';
+                const newPaidAt = isPaid ? new Date().toISOString() : null;
+
                 return {
                     ...m,
-                    status: isPaid ? 'paid' : 'pending',
-                    paidAt: isPaid ? new Date().toISOString() : null
+                    // Legacy support
+                    status: expenseId === 'initial' ? newStatus : m.status,
+                    paidAt: expenseId === 'initial' ? newPaidAt : m.paidAt,
+                    // New multi-payment support
+                    payments: {
+                        ...payments,
+                        [expenseId]: {
+                            status: newStatus,
+                            paidAt: newPaidAt
+                        }
+                    }
                 };
             }
             return m;
         });
 
+        const sanitizedMembers = JSON.parse(JSON.stringify(updatedMembers));
         await updateDoc(groupRef, {
-            members: updatedMembers
+            members: sanitizedMembers
         });
 
         return { success: true };
@@ -200,22 +274,40 @@ export async function searchUsers(term: string): Promise<InvitationResult> {
         const usersRef = collection(db, "users");
         const searchTerm = term.toLowerCase();
 
-        // Search by lowercase name (prefix search)
-        // searchName >= "dan" AND searchName <= "dan" + "\uf8ff"
-        const q = query(
+        const usersMap = new Map();
+
+        // 1. Search by email prefix
+        const emailQuery = query(
             usersRef,
-            where("searchName", ">=", searchTerm),
-            where("searchName", "<=", searchTerm + '\uf8ff')
+            where("email", ">=", searchTerm),
+            where("email", "<=", searchTerm + '\uf8ff')
         );
-
-        const querySnapshot = await getDocs(q);
-
-        const users: any[] = [];
-        querySnapshot.forEach((doc) => {
-            users.push(doc.data());
+        const emailSnapshot = await getDocs(emailQuery);
+        emailSnapshot.forEach((doc) => {
+            const data = doc.data();
+            usersMap.set(data.uid, data);
         });
 
-        // Limit results to 5 to avoid spam/overload
+        // 2. Search by lowercase name (prefix search)
+        if (usersMap.size < 5) {
+            const nameQuery = query(
+                usersRef,
+                where("searchName", ">=", searchTerm),
+                where("searchName", "<=", searchTerm + '\uf8ff')
+            );
+
+            const nameSnapshot = await getDocs(nameQuery);
+            nameSnapshot.forEach((doc) => {
+                const data = doc.data();
+                if (!usersMap.has(data.uid)) {
+                    usersMap.set(data.uid, data);
+                }
+            });
+        }
+
+        const users = Array.from(usersMap.values());
+
+        // Limit results to 5
         return { success: true, users: users.slice(0, 5) };
     } catch (error) {
         console.error("Error searching users:", error);

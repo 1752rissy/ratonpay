@@ -39,33 +39,69 @@ export async function createGroup(formData: FormData) {
 
     // Amount Handling
     const amountStr = formData.get("amount");
-    const amount = amountStr ? parseFloat(amountStr as string) : 0;
+    let amount = amountStr ? parseFloat(amountStr as string) : 0;
+
+    const expenseType = formData.get("type") as 'single' | 'multiple' || 'single';
+    const itemsJson = formData.get("items");
+    const items = itemsJson ? JSON.parse(itemsJson as string) : [];
+
+    if (expenseType === 'multiple' && items.length > 0) {
+        amount = items.reduce((sum: number, item: any) => sum + parseFloat(item.amount || 0), 0);
+    }
 
     // Existing members to invite (Recycle Group Logic)
     const existingMembersJson = formData.get("existingMembers");
     const membersToInvite = existingMembersJson ? JSON.parse(existingMembersJson as string) : [];
 
+    const expenses = [];
+    if (amount > 0 || (items && items.length > 0)) {
+        const description = formData.get("description") as string;
+        const initialExpense = {
+            id: crypto.randomUUID(),
+            description: description || name || "Gasto Inicial",
+            amount: amount,
+            type: expenseType,
+            items: items,
+            payerId: ownerUid || payerId,
+            createdAt: new Date().toISOString(),
+            deadlineDate: deadlineDate
+        };
+        expenses.push(initialExpense);
+    }
+
+    const firstExpenseId = expenses.length > 0 ? expenses[0].id : null;
+
     const groupData = {
         name,
         payerName,
-        payerId, // This might become redundant if we use ownerUid, but keeping for backward compat for now
+        payerId,
         alias,
         description: description || null,
-        amount: amount, // Total amount
-        deadlineDate,
+        amount: 0, // No aggregate total at root anymore
+        type: expenseType,
+        expenses: expenses, // Can be empty now
+        items: [], // Deprecated
+        timeLimit: timeLimit || 'none', // Save the duration enum for future expenses
+        deadlineDate, // Legacy support
         createdBy: ownerUid || 'anonymous',
         ownerEmail: ownerEmail || null,
         members: [
             {
-                id: ownerUid || payerId, // Prefer UID if available
+                id: ownerUid || payerId,
                 name: payerName,
                 email: ownerEmail || null,
                 joinedAt: new Date().toISOString(),
-                status: 'paid', // Admin starts as valid since they paid the bill
-                paidAt: new Date().toISOString() // Mark as paid now
+                // Payer status
+                status: 'pending', // Default to pending at root
+                payments: firstExpenseId ? {
+                    [firstExpenseId]: {
+                        status: 'paid',
+                        paidAt: new Date().toISOString()
+                    }
+                } : {}
             }
         ],
-        memberIds: [ownerUid || payerId], // Array for easy querying
+        memberIds: [ownerUid || payerId],
         createdAt: new Date().toISOString()
     };
 
@@ -122,26 +158,29 @@ export async function createGroup(formData: FormData) {
             }
 
             // Post-loop notification loop (better for readability)
-            for (const member of membersToInvite) {
-                if (member.id === fromUser.uid) continue;
-                try {
-                    const userRef = doc(firestoreDb, "users", member.id); // Using firestoreDb to avoid conflict
-                    const userSnap = await getDoc(userRef);
-                    if (userSnap.exists()) {
-                        const userData = userSnap.data();
-                        if (userData?.fcmToken) {
-                            await sendPushNotification(
-                                userData.fcmToken,
-                                `🐀 Nuevo Gasto: ${name}`,
-                                `${payerName} te agregó a un gasto. Toca para ver detalle.`,
-                                `/group/${docRef.id}`
-                            );
+            // Run asynchronously to prevent blocking the UI
+            (async () => {
+                for (const member of membersToInvite) {
+                    if (member.id === fromUser.uid) continue;
+                    try {
+                        const userRef = doc(firestoreDb, "users", member.id); // Using firestoreDb to avoid conflict
+                        const userSnap = await getDoc(userRef);
+                        if (userSnap.exists()) {
+                            const userData = userSnap.data();
+                            if (userData?.fcmToken) {
+                                await sendPushNotification(
+                                    userData.fcmToken,
+                                    `🐀 Nuevo Gasto: ${name}`,
+                                    `${payerName} te agregó a un gasto. Toca para ver detalle.`,
+                                    `/group/${docRef.id}`
+                                );
+                            }
                         }
+                    } catch (err) {
+                        console.error("Failed to notify user", member.id, err);
                     }
-                } catch (err) {
-                    console.error("Failed to notify user", member.id, err);
                 }
-            }
+            })().catch(err => console.error("Async notification error:", err));
 
         }
 

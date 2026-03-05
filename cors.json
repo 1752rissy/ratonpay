@@ -1,7 +1,6 @@
 [
     {
         "origin": [
-            "http://localhost:3000",
             "*"
         ],
         "method": [
@@ -9,14 +8,7 @@
             "PUT",
             "POST",
             "DELETE",
-            "HEAD",
             "OPTIONS"
-        ],
-        "responseHeader": [
-            "Authorization",
-            "Content-Type",
-            "x-goog-resumable",
-            "x-firebase-storage-version"
         ],
         "maxAgeSeconds": 3600
     }

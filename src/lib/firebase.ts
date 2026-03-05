@@ -11,28 +11,6 @@ const firebaseConfig = {
     appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || "1:123456789:web:abcdef",
 };
 
-// Debugging: Log if we are using the fallback key
-if (typeof window !== 'undefined') {
-    // Add a global check to window to see if we already alerted to avoid spam
-    if (!(window as any).hasAlertedFirebase) {
-        const isDummy = firebaseConfig.apiKey === "AIzaSyDummyKeyForBuildProcess";
-
-        // Use console.error for visibility even if not an error
-        console.error("[Firebase Debug] App Version: 2026-02-06_15-50");
-        console.error("[Firebase Debug] Is Dummy Key?:", isDummy);
-
-        // Log first few chars of key to verify it's not "undefined" or weird, without leaking full key
-        const key = firebaseConfig.apiKey || "";
-        console.error(`[Firebase Debug] Key Start: ${key.substring(0, 5)}... Length: ${key.length}`);
-        console.error(`[Firebase Debug] AuthDomain: ${firebaseConfig.authDomain}`);
-        console.error(`[Firebase Debug] ProjectId: ${firebaseConfig.projectId}`);
-
-        if (isDummy) {
-            alert("⚠️ ERROR CRÍTICO: Claves DUMMY detectadas. Revisa las variables de entorno en Vercel.");
-        }
-        (window as any).hasAlertedFirebase = true;
-    }
-}
 
 import { getStorage } from "firebase/storage";
 

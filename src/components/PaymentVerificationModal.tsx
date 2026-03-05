@@ -55,8 +55,8 @@ export default function PaymentVerificationModal({
                 {/* Header */}
                 <div className="p-6 border-b border-zinc-800 flex justify-between items-center bg-zinc-900/50">
                     <div>
-                        <h3 className="text-lg font-bold text-white">Verificar Pago</h3>
-                        <p className="text-xs text-zinc-500">De <span className="text-emerald-400 font-bold">{memberName}</span></p>
+                        <h3 className="text-lg font-bold text-white">Validar Pago</h3>
+                        <p className="text-xs text-zinc-500">Comprobante de <span className="text-emerald-400 font-bold">{memberName}</span></p>
                     </div>
                     <button onClick={onClose} className="p-2 hover:bg-zinc-800 rounded-full transition-colors text-zinc-400">
                         <X className="w-5 h-5" />
@@ -107,7 +107,7 @@ export default function PaymentVerificationModal({
                         disabled={loading}
                         className="flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-bold bg-emerald-500 hover:bg-emerald-400 text-zinc-950 shadow-lg shadow-emerald-500/20 active:scale-95 transition-all"
                     >
-                        {loading ? <Loader2 className="animate-spin w-4 h-4" /> : <><Check className="w-4 h-4" /> Aprobar</>}
+                        {loading ? <Loader2 className="animate-spin w-4 h-4" /> : <><Check className="w-4 h-4" /> Validar Pago</>}
                     </button>
                 </div>
             </div>
