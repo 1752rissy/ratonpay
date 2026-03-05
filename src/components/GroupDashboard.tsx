@@ -784,7 +784,7 @@ export default function GroupDashboard({ groupId }: { groupId: string }) {
                                                                                     <Eye className="w-3.5 h-3.5" /> Validar Pago
                                                                                 </button>
                                                                             )}
-                                                                            {!isPendingApproval && (
+                                                                            {(!isPendingApproval && isPaid) && (
                                                                                 <button
                                                                                     onClick={() => togglePaymentStatus(groupId, member.id, !isPaid, sectionId)}
                                                                                     className={cn(
@@ -793,9 +793,9 @@ export default function GroupDashboard({ groupId }: { groupId: string }) {
                                                                                             ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400 hover:bg-red-500/10 hover:border-red-500/20 hover:text-red-400"
                                                                                             : "bg-zinc-800/50 border-zinc-700/50 text-zinc-500 hover:text-emerald-500 hover:border-emerald-500/30 hover:bg-emerald-500/10"
                                                                                     )}
-                                                                                    title={isPaid ? "Desmarcar pago" : "Marcar como pagado manualmente"}
+                                                                                    title="Desmarcar pago"
                                                                                 >
-                                                                                    {isPaid ? <CheckCircle2 className="w-4 h-4" /> : <DollarSign className="w-4 h-4" />}
+                                                                                    <CheckCircle2 className="w-4 h-4" />
                                                                                 </button>
                                                                             )}
                                                                         </div>

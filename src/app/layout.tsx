@@ -35,6 +35,22 @@ export const metadata: Metadata = {
     shortcut: "/favicon.ico",
     apple: "/icons/icon-192x192.png",
   },
+  openGraph: {
+    title: "Ratón Pay - Gastos Compartidos",
+    description: "Únete a este grupo dentro de la rata para dividir los gastos.",
+    url: "https://ratonpay.vercel.app",
+    siteName: "Ratón Pay",
+    images: [
+      {
+        url: "/icons/icon-512x512.png", // Usamos el ícono más grande disponible localmente como imagen principal (WhatsApp lo recorta a cuadrado)
+        width: 512,
+        height: 512,
+        alt: "Logo Ratón Pay",
+      },
+    ],
+    locale: "es_ES",
+    type: "website",
+  },
 };
 
 export default function RootLayout({

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { Loader2, Search, UserPlus, X, CheckCircle, AlertCircle, Copy } from "lucide-react";
+import { Loader2, Search, UserPlus, X, CheckCircle, AlertCircle, Copy, MessageCircle } from "lucide-react";
 import { searchUsers, sendInvitation } from "@/app/actions/invitations";
 import { useAuth } from "@/context/AuthContext";
 import Image from "next/image";
@@ -28,6 +28,11 @@ export default function InviteMemberModal({ groupId, groupName, onClose, onInvit
         navigator.clipboard.writeText(joinUrl);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
+    };
+
+    const handleWhatsAppShare = () => {
+        const text = `🐭 ¡Tienes una invitación para unirte al grupo "${groupName}" dentro de La Rata!\n\nIngresa a la app y revisa tus invitaciones pendientes para aceptarla y ver los detalles del gasto:\nhttps://ratonpay.vercel.app`;
+        window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
     };
 
     // Live search effect
@@ -171,7 +176,19 @@ export default function InviteMemberModal({ groupId, groupName, onClose, onInvit
                         </div>
                     ))}
                 </div>
-
+                <div className="pt-4 mt-2 border-t border-zinc-800 space-y-3">
+                    <button
+                        type="button"
+                        onClick={handleWhatsAppShare}
+                        className="w-full flex items-center justify-center gap-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 py-3 rounded-xl font-bold transition-colors border border-emerald-500/20"
+                    >
+                        <MessageCircle className="w-5 h-5" />
+                        Avisar por WhatsApp
+                    </button>
+                    <p className="text-center text-[10px] text-zinc-500">
+                        El usuario debe registrarse o iniciar sesión con el email al que lo invitaste para poder unirse.
+                    </p>
+                </div>
             </div>
         </div>
     );
