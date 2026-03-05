@@ -18,6 +18,7 @@ import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { storage } from "@/lib/firebase";
 import { addItemToExpense } from "@/app/actions/add-expense";
 import confetti from "canvas-confetti";
+import PlacesRecommendations from "./PlacesRecommendations";
 
 interface Member {
     id: string;
@@ -841,6 +842,9 @@ export default function GroupDashboard({ groupId }: { groupId: string }) {
 
                 {/* Right Column: Rankings & Actions */}
                 <div className="space-y-6">
+
+                    {/* Quick Places Search */}
+                    <PlacesRecommendations />
 
                     {/* Velocistas Card */}
                     <div className="bg-gradient-to-br from-zinc-900 to-zinc-950 p-6 rounded-3xl border border-zinc-800 shadow-xl relative overflow-hidden group">
