@@ -218,12 +218,22 @@ export default function GroupDashboard({ groupId }: { groupId: string }) {
             const q = query(
                 collection(db, "invitations"),
                 where("groupId", "==", groupId),
-                where("toUid", "==", currentId),
-                where("status", "==", "pending")
+                where("toUid", "==", currentId)
             );
             getDocs(q).then((snapshot) => {
                 if (!snapshot.empty) {
-                    setAccessStatus("invited");
+                    // There could be multiple invitations, find the most relevant one
+                    const pendingDoc = snapshot.docs.find(d => d.data().status === 'pending');
+                    const acceptedDoc = snapshot.docs.find(d => d.data().status === 'accepted');
+
+                    if (pendingDoc) {
+                        setAccessStatus("invited");
+                    } else if (acceptedDoc) {
+                        // They accepted it recently, the group doc is just lagging. Prevent "denied" flash.
+                        setAccessStatus("allowed");
+                    } else {
+                        setAccessStatus("denied");
+                    }
                 } else {
                     setAccessStatus("denied");
                 }
