@@ -1,4 +1,4 @@
-import { MapPin, Beer, Pizza, Coffee, UtensilsCrossed, Music } from "lucide-react";
+import { MapPin, Beer, Pizza, Coffee, UtensilsCrossed, Music, Trophy } from "lucide-react";
 import React from "react";
 
 const PLACES_CATEGORIES = [
@@ -7,6 +7,7 @@ const PLACES_CATEGORIES = [
     { name: "Pizzerías", icon: Pizza, color: "text-orange-500", bg: "bg-orange-500/10", border: "border-orange-500/20", query: "pizzerias cerca" },
     { name: "Restaurantes", icon: UtensilsCrossed, color: "text-rose-500", bg: "bg-rose-500/10", border: "border-rose-500/20", query: "restaurantes cerca" },
     { name: "Cafeterías", icon: Coffee, color: "text-yellow-600", bg: "bg-yellow-600/10", border: "border-yellow-600/20", query: "cafeterias cerca" },
+    { name: "Canchas Fútbol", icon: Trophy, color: "text-emerald-500", bg: "bg-emerald-500/10", border: "border-emerald-500/20", query: "canchas de futbol cerca" },
 ];
 
 export default function PlacesRecommendations() {
