@@ -55,6 +55,12 @@ export default function Home() {
 
     if (res.success && accept && res.groupId) {
       router.push(`/group/${res.groupId}`);
+    } else if (!res.success) {
+      // Revert optimistic update on error by reloading invites
+      getPendingInvitations(user.uid).then(r => {
+        if (r.success) setInvitations(r.invitations || []);
+      });
+      alert("No se pudo responder a la invitación");
     }
   }
 

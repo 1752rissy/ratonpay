@@ -8,6 +8,9 @@ const withPWA = withPWAInit({
 });
 
 const nextConfig: NextConfig = {
+  experimental: {
+    optimizePackageImports: ['lucide-react', 'framer-motion'],
+  },
   images: {
     remotePatterns: [
       {

@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { doc, onSnapshot } from "firebase/firestore";
+import { doc, onSnapshot, collection, query, where, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { Loader2, UserPlus, Users, Plus, ArrowLeft, Clock, AlertTriangle, AlertCircle, FileText, CheckCircle2, DollarSign, Trophy, Turtle, LogOut, Upload, Eye, Copy, Check, List, Trash2, ShieldCheck, Wallet } from "lucide-react";
+import { Loader2, UserPlus, Users, Plus, ArrowLeft, Clock, AlertTriangle, AlertCircle, FileText, CheckCircle2, DollarSign, Trophy, Turtle, LogOut, Upload, Eye, Copy, Check, List, Trash2, ShieldCheck, Wallet, Mail, X as XIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
@@ -13,6 +13,7 @@ import PaymentVerificationModal from "./PaymentVerificationModal";
 import PendingInvitationsList from "./PendingInvitationsList";
 import { useAuth } from "@/context/AuthContext";
 import { togglePaymentStatus, leaveGroup, uploadPaymentProof, verifyPaymentProof } from "@/app/actions/invitations";
+import { removeMember } from "@/app/actions/remove-member";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { storage } from "@/lib/firebase";
 import { addItemToExpense } from "@/app/actions/add-expense";
@@ -56,6 +57,7 @@ interface Group {
     deadlineDate?: string;
     createdAt?: string;
     members: Member[];
+    memberIds?: string[];
     expenseReceiptUrl?: string;
     status?: string;
     expenses?: Expense[];
@@ -79,6 +81,8 @@ export default function GroupDashboard({ groupId }: { groupId: string }) {
     const [uploadingInfo, setUploadingInfo] = useState<{ memberId: string; uploading: boolean } | null>(null);
     const [uploadSuccess, setUploadSuccess] = useState<{ memberId: string; expenseId: string } | null>(null);
     const router = useRouter();
+    const [refreshInvites, setRefreshInvites] = useState(0);
+    const [accessStatus, setAccessStatus] = useState<"checking" | "allowed" | "denied" | "invited">("checking");
 
     const [isSubmittingItem, setIsSubmittingItem] = useState(false);
     const [localId, setLocalId] = useState<string | null>(null);
@@ -195,6 +199,37 @@ export default function GroupDashboard({ groupId }: { groupId: string }) {
     // Check if I am admin (payer/creator)
     const isAdmin = currentUserId && (currentUserId === group?.payerId || (group as any)?.createdBy === currentUserId);
 
+    useEffect(() => {
+        if (loading || !group) return;
+        const currentId = user?.uid || localId;
+
+        if (!currentId) {
+            setAccessStatus("denied");
+            return;
+        }
+
+        const isMember = group.memberIds?.includes(currentId) || group.members.some((m: any) => m.id === currentId);
+        const isCreator = group.payerId === currentId || (group as any).createdBy === currentId;
+
+        if (isMember || isCreator) {
+            setAccessStatus("allowed");
+        } else {
+            const q = query(
+                collection(db, "invitations"),
+                where("groupId", "==", groupId),
+                where("toUid", "==", currentId),
+                where("status", "==", "pending")
+            );
+            getDocs(q).then((snapshot) => {
+                if (!snapshot.empty) {
+                    setAccessStatus("invited");
+                } else {
+                    setAccessStatus("denied");
+                }
+            });
+        }
+    }, [group, user, localId, groupId, loading]);
+
     async function handleTogglePayment(memberId: string, currentStatus: string | undefined) {
         if (!isAdmin) return;
         const isPaid = currentStatus === 'paid';
@@ -237,13 +272,33 @@ export default function GroupDashboard({ groupId }: { groupId: string }) {
         );
     }
 
+    async function handleRemoveMember(memberId: string, memberName: string) {
+        if (!isAdmin || !currentUserId) return;
+        setConfirmModal({
+            isOpen: true,
+            title: "Eliminar Miembro",
+            description: `¿Estás seguro de que deseas eliminar a ${memberName} del grupo?\n\nEsta acción no se puede deshacer.`,
+            onConfirm: async () => {
+                const res = await removeMember(groupId, memberId, currentUserId);
+                if (!res.success) {
+                    alert(res.error || "Error al eliminar miembro");
+                }
+                setConfirmModal(prev => ({ ...prev, isOpen: false }));
+            }
+        });
+    }
+
     const [pendingInvitesCount, setPendingInvitesCount] = useState(0);
     useEffect(() => {
-        import("@/app/actions/invitations").then(({ getGroupPendingInvitationsCount }) => {
-            getGroupPendingInvitationsCount(groupId).then(res => {
-                if (res.success) setPendingInvitesCount(res.count);
-            });
+        const q = query(
+            collection(db, "invitations"),
+            where("groupId", "==", groupId),
+            where("status", "==", "pending")
+        );
+        const unsub = onSnapshot(q, (snapshot) => {
+            setPendingInvitesCount(snapshot.size);
         });
+        return () => unsub();
     }, [groupId]);
 
     // Confetti Effect for All Paid AND Admin Receipt Uploaded
@@ -280,8 +335,38 @@ export default function GroupDashboard({ groupId }: { groupId: string }) {
         }
     }, [group]);
 
-    if (loading) return <div className="flex justify-center p-12"><Loader2 className="animate-spin w-8 h-8 text-slate-400" /></div>;
+    if (loading || accessStatus === "checking") return <div className="flex justify-center p-12"><Loader2 className="animate-spin w-8 h-8 text-emerald-500" /></div>;
     if (!group) return <div className="flex justify-center p-12">Grupo no encontrado</div>;
+
+    if (accessStatus === "denied") {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 space-y-4">
+                <div className="w-16 h-16 bg-red-500/10 text-red-500 rounded-full flex items-center justify-center">
+                    <ShieldCheck className="w-8 h-8" />
+                </div>
+                <h2 className="text-2xl font-bold text-white">Acceso Denegado</h2>
+                <p className="text-zinc-400">No eres miembro de este grupo ni tienes una invitación pendiente.</p>
+                <Link href="/" className="mt-4 px-6 py-2 bg-emerald-500 text-black font-bold rounded-xl hover:bg-emerald-400 transition-colors">
+                    Volver al Inicio
+                </Link>
+            </div>
+        );
+    }
+
+    if (accessStatus === "invited") {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 space-y-4">
+                <div className="w-16 h-16 bg-yellow-500/10 text-yellow-500 rounded-full flex items-center justify-center">
+                    <Mail className="w-8 h-8" />
+                </div>
+                <h2 className="text-2xl font-bold text-white">Invitación Pendiente</h2>
+                <p className="text-zinc-400">Tienes una invitación pendiente para unirte a este grupo.</p>
+                <Link href="/" className="mt-4 px-6 py-2 bg-emerald-500 text-black font-bold rounded-xl hover:bg-emerald-400 transition-colors shadow-lg shadow-emerald-500/20">
+                    Ir al Inicio para Aceptar
+                </Link>
+            </div>
+        );
+    }
 
     // Ranking Logic
     const visibleMembers = group.members; // Show everyone including payer
@@ -746,7 +831,7 @@ export default function GroupDashboard({ groupId }: { groupId: string }) {
 
                     {/* Pending Invitations Management (Admin Only) */}
                     {hasMounted && isAdmin && (
-                        <PendingInvitationsList groupId={groupId} currentUserId={user?.uid} />
+                        <PendingInvitationsList groupId={groupId} currentUserId={user?.uid} refreshTrigger={refreshInvites} />
                     )}
                 </div>
 
@@ -784,6 +869,14 @@ export default function GroupDashboard({ groupId }: { groupId: string }) {
                                                 })()}
                                             </p>
                                         </div>
+                                        {isAdmin && currentUserId !== member.id && (
+                                            <button
+                                                onClick={() => handleRemoveMember(member.id, member.name)}
+                                                className="p-1.5 bg-red-500/10 text-red-500 hover:bg-red-500/20 rounded-md transition-colors"
+                                            >
+                                                <XIcon className="w-4 h-4" />
+                                            </button>
+                                        )}
                                     </div>
                                 ))
                             ) : (
@@ -812,9 +905,17 @@ export default function GroupDashboard({ groupId }: { groupId: string }) {
                                 <div className="space-y-4">
                                     <div className="flex flex-wrap gap-2">
                                         {debtors.map((member) => (
-                                            <span key={member.id} className="px-3 py-1 bg-red-500/10 border border-red-500/20 text-red-400 rounded-lg text-xs font-bold">
-                                                {member.name}
-                                            </span>
+                                            <div key={member.id} className="flex items-center gap-1 px-3 py-1 bg-red-500/10 border border-red-500/20 text-red-400 rounded-lg text-xs font-bold group/debtor">
+                                                <span>{member.name}</span>
+                                                {isAdmin && currentUserId !== member.id && (
+                                                    <button
+                                                        onClick={() => handleRemoveMember(member.id, member.name)}
+                                                        className="p-0.5 ml-1 text-red-400 hover:text-red-300 opacity-50 group-hover/debtor:opacity-100 transition-opacity"
+                                                    >
+                                                        <XIcon className="w-3 h-3" />
+                                                    </button>
+                                                )}
+                                            </div>
                                         ))}
                                     </div>
                                     <div className="bg-red-500/5 border border-red-500/10 p-3 rounded-xl">
@@ -853,6 +954,7 @@ export default function GroupDashboard({ groupId }: { groupId: string }) {
                     groupId={groupId}
                     groupName={group.name}
                     onClose={() => setIsInviteModalOpen(false)}
+                    onInviteSent={() => setRefreshInvites(prev => prev + 1)}
                 />
             )}
 

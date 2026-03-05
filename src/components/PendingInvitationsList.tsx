@@ -4,23 +4,30 @@ import { useEffect, useState } from "react";
 import { Loader2, X, Clock } from "lucide-react";
 import { getPendingInvitationsForGroup, cancelInvitation } from "@/app/actions/invitations";
 
-export default function PendingInvitationsList({ groupId, currentUserId }: { groupId: string, currentUserId?: string }) {
+export default function PendingInvitationsList({ groupId, currentUserId, refreshTrigger }: { groupId: string, currentUserId?: string, refreshTrigger?: number }) {
     const [invitations, setInvitations] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [cancellingId, setCancellingId] = useState<string | null>(null);
 
     useEffect(() => {
-        loadInvites();
-    }, [groupId]);
+        import("@/lib/firebase").then(({ db }) => {
+            import("firebase/firestore").then(({ collection, query, where, onSnapshot }) => {
+                const q = query(
+                    collection(db, "invitations"),
+                    where("groupId", "==", groupId),
+                    where("status", "==", "pending")
+                );
 
-    function loadInvites() {
-        getPendingInvitationsForGroup(groupId).then(res => {
-            if (res.success) {
-                setInvitations(res.invitations || []);
-            }
-            setLoading(false);
+                const unsub = onSnapshot(q, (snapshot) => {
+                    const invs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    setInvitations(invs);
+                    setLoading(false);
+                });
+
+                return () => unsub();
+            });
         });
-    }
+    }, [groupId]);
 
     async function handleCancel(inviteId: string) {
         if (!currentUserId) return;
