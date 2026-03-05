@@ -371,6 +371,27 @@ export default function GroupDashboard({ groupId }: { groupId: string }) {
     // Ranking Logic
     const visibleMembers = group.members; // Show everyone including payer
 
+    // Helper to get member status for a specific expense
+    const getMemberStatus = (member: Member, expenseId: string) => {
+        if (member.payments?.[expenseId]) {
+            return member.payments[expenseId];
+        }
+        return { status: 'pending' as const };
+    };
+
+    // Debtors are those who haven't paid at least one group expense
+    const pendingMembers = group.members.filter(m => {
+        if (m.id === group.payerId) return false;
+        if (group.expenses && group.expenses.length > 0) {
+            return group.expenses.some(e => {
+                // If the expense was created by this member, they don't owe it to themselves
+                if (e.payerId === m.id) return false;
+                return getMemberStatus(m, e.id).status !== 'paid';
+            });
+        }
+        return m.status !== 'paid';
+    });
+
     // Ranking Logic (Velocistas)
     // A member is a velocista if they are not in pendingMembers (meaning they paid everything they owe)
     // Their ranking time is the LAST time they paid an expense.
@@ -405,26 +426,9 @@ export default function GroupDashboard({ groupId }: { groupId: string }) {
         .filter(m => m._calculatedPaidAt !== null)
         .sort((a, b) => new Date(a._calculatedPaidAt!).getTime() - new Date(b._calculatedPaidAt!).getTime());
 
-    // Helper to get member status for a specific expense
-    const getMemberStatus = (member: Member, expenseId: string) => {
-        if (member.payments?.[expenseId]) {
-            return member.payments[expenseId];
-        }
-        return { status: 'pending' as const };
-    };
 
-    // Debtors are those who haven't paid at least one group expense
-    const pendingMembers = group.members.filter(m => {
-        if (m.id === group.payerId) return false;
-        if (group.expenses && group.expenses.length > 0) {
-            return group.expenses.some(e => {
-                // If the expense was created by this member, they don't owe it to themselves
-                if (e.payerId === m.id) return false;
-                return getMemberStatus(m, e.id).status !== 'paid';
-            });
-        }
-        return m.status !== 'paid';
-    });
+
+
 
     // Check if any expense is globally expired
     const isExpired = (group.expenses || []).some(e => e.deadlineDate && new Date(e.deadlineDate).getTime() < currentTime);
