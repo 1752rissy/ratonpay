@@ -3,7 +3,9 @@
 import { useEffect, useState } from "react";
 import { doc, onSnapshot, collection, query, where, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { Loader2, UserPlus, Users, Plus, ArrowLeft, Clock, AlertTriangle, AlertCircle, FileText, CheckCircle2, DollarSign, Trophy, Turtle, LogOut, Upload, Eye, Copy, Check, List, Trash2, ShieldCheck, Wallet, Mail, X as XIcon } from "lucide-react";
+import {
+    Loader2, DollarSign, Users, ChevronLeft, Plus, Edit, Share2, Check, ExternalLink, Activity, Info, ChevronRight, X, AlertCircle, Trash2, Camera, Receipt, Clock, CheckCircle2, ShieldCheck, Mail, MapPin, Eye, ImageIcon, UserPlus, Trophy, Turtle, LogOut, Upload, List, ArrowLeft, X as XIcon, AlertTriangle, Wallet, Copy
+} from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
@@ -12,11 +14,12 @@ import ConfirmationModal from "./ConfirmationModal";
 import PaymentVerificationModal from "./PaymentVerificationModal";
 import PendingInvitationsList from "./PendingInvitationsList";
 import { useAuth } from "@/context/AuthContext";
-import { togglePaymentStatus, leaveGroup, uploadPaymentProof, verifyPaymentProof } from "@/app/actions/invitations";
 import { removeMember } from "@/app/actions/remove-member";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { storage } from "@/lib/firebase";
 import { addItemToExpense } from "@/app/actions/add-expense";
+import { deleteExpense } from "@/app/actions/delete-expense";
+import { togglePaymentStatus, leaveGroup, uploadPaymentProof, verifyPaymentProof } from "@/app/actions/invitations";
 import confetti from "canvas-confetti";
 import PlacesRecommendations from "./PlacesRecommendations";
 
@@ -69,6 +72,7 @@ interface Group {
 
 export default function GroupDashboard({ groupId }: { groupId: string }) {
     const { user } = useAuth();
+    const router = useRouter();
     const [group, setGroup] = useState<Group | null>(null);
     const [loading, setLoading] = useState(true);
     const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
@@ -81,7 +85,7 @@ export default function GroupDashboard({ groupId }: { groupId: string }) {
     const [verificationModal, setVerificationModal] = useState<{ isOpen: boolean; receiptUrl: string; memberName: string; memberId: string; expenseId?: string } | null>(null);
     const [uploadingInfo, setUploadingInfo] = useState<{ memberId: string; uploading: boolean } | null>(null);
     const [uploadSuccess, setUploadSuccess] = useState<{ memberId: string; expenseId: string } | null>(null);
-    const router = useRouter();
+    const [deleteExpenseModal, setDeleteExpenseModal] = useState({ isOpen: false, expenseId: "" });
     const [refreshInvites, setRefreshInvites] = useState(0);
     const [accessStatus, setAccessStatus] = useState<"checking" | "allowed" | "denied" | "invited">("checking");
 
@@ -299,6 +303,22 @@ export default function GroupDashboard({ groupId }: { groupId: string }) {
         });
     }
 
+    const handleDeleteExpense = async () => {
+        if (!user || !deleteExpenseModal.expenseId) return;
+
+        try {
+            const res = await deleteExpense(groupId, deleteExpenseModal.expenseId, user.uid);
+            if (!res.success) {
+                alert("Error: " + res.error);
+            }
+        } catch (e) {
+            console.error(e);
+            alert("Ocurrió un error al intentar eliminar el gasto.");
+        } finally {
+            setDeleteExpenseModal({ isOpen: false, expenseId: "" });
+        }
+    };
+
     const [pendingInvitesCount, setPendingInvitesCount] = useState(0);
     useEffect(() => {
         const q = query(
@@ -456,6 +476,18 @@ export default function GroupDashboard({ groupId }: { groupId: string }) {
         return dateB - dateA;
     });
 
+    // Calculate pending approvals count
+    const pendingApprovalsCount = group.members.reduce((count, member) => {
+        if (member.id === group.payerId) return count; // Payer doesn't need approval
+        if (group.expenses && group.expenses.length > 0) {
+            return count + group.expenses.filter(e => {
+                if (e.payerId === member.id) return false; // Member is payer for this expense
+                return getMemberStatus(member, e.id).status === 'pending_approval';
+            }).length;
+        }
+        return count + (member.status === 'pending_approval' ? 1 : 0);
+    }, 0);
+
     return (
         <div className="space-y-8 pb-20">
             {/* Header Section with Gradient */}
@@ -520,11 +552,55 @@ export default function GroupDashboard({ groupId }: { groupId: string }) {
                 </div>
             )}
 
+            {/* Memories Navigation - Temporarily disabled by request */}
+            {/*
+            <div className="mb-6">
+                <Link
+                    href={`/group/${groupId}/memories`}
+                    className="w-full py-4 rounded-xl text-md font-black bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white transition-all flex items-center justify-center gap-3 shadow-[0_8px_30px_rgb(16,185,129,0.2)] hover:shadow-[0_8px_40px_rgb(16,185,129,0.3)] active:scale-[0.98] group border border-white/20"
+                >
+                    <ImageIcon className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                    Muro de Recuerdos
+                    <ChevronRight className="w-5 h-5 text-emerald-100 group-hover:translate-x-1 transition-transform" />
+                </Link>
+            </div>
+            */}
+
             {/* Main Content Info */}
             <div className="grid lg:grid-cols-3 gap-8 relative z-10">
 
-                {/* Left Column: Details & Members */}
+                {/* Left Column: Main Content */}
                 <div className="lg:col-span-2 space-y-6">
+
+                    {/* Pending Approvals Alert for Admin ONLY in Summary Tab */}
+                    {pendingApprovalsCount > 0 && isAdmin && (
+                        <div className="bg-emerald-500/10 border border-emerald-500/30 p-4 rounded-2xl flex items-center justify-between mb-6 shadow-lg shadow-emerald-500/5 animate-in fade-in slide-in-from-top-2">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center text-emerald-500">
+                                    <ShieldCheck className="w-5 h-5" />
+                                </div>
+                                <div>
+                                    <p className="text-white font-bold text-sm">Validaciones Pendientes</p>
+                                    <p className="text-zinc-400 text-xs">Hay {pendingApprovalsCount} comprobante{pendingApprovalsCount !== 1 ? 's' : ''} por revisar.</p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Admin Action Bar (only in summary tab) */}
+                    {isAdmin && (
+                        <div className="bg-emerald-500/5 border border-emerald-500/10 p-4 rounded-2xl mb-6 flex flex-wrap gap-2 justify-center lg:justify-start">
+                            <button
+                                onClick={() => setIsInviteModalOpen(true)}
+                                className="flex items-center gap-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 py-2 px-4 rounded-xl font-bold transition-colors border border-emerald-500/20 text-xs flex-1 sm:flex-none justify-center"
+                            >
+                                <Users className="w-4 h-4" /> INVITAR
+                            </button>
+                            <Link href={`/group/${groupId}/edit`} className="flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-white py-2 px-4 rounded-xl font-bold transition-colors border border-zinc-700 text-xs flex-1 sm:flex-none justify-center">
+                                <Edit className="w-4 h-4" /> EDITAR
+                            </Link>
+                        </div>
+                    )}
 
                     {/* Expenses List Section */}
                     <div className="space-y-8">
@@ -594,6 +670,15 @@ export default function GroupDashboard({ groupId }: { groupId: string }) {
                                                                 <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 text-[8px] font-black tracking-widest uppercase">Varios</span>
                                                             ) : (
                                                                 <span className="px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20 text-[8px] font-black tracking-widest uppercase">Único</span>
+                                                            )}
+                                                            {isAdmin && sectionId !== 'root' && (
+                                                                <button
+                                                                    onClick={() => setDeleteExpenseModal({ isOpen: true, expenseId: sectionId })}
+                                                                    className="p-1.5 ml-1 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded-full transition-colors hidden group-hover/card:flex active:scale-95"
+                                                                    title="Eliminar gasto"
+                                                                >
+                                                                    <Trash2 className="w-4 h-4" />
+                                                                </button>
                                                             )}
                                                         </div>
                                                         <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest flex items-center gap-2">
@@ -705,19 +790,23 @@ export default function GroupDashboard({ groupId }: { groupId: string }) {
                                                                     ? "bg-emerald-500/5 border-emerald-500/20"
                                                                     : isPendingApproval
                                                                         ? "bg-amber-500/5 border-amber-500/20"
-                                                                        : "bg-zinc-950/30 border-zinc-800/50 hover:border-zinc-700"
+                                                                        : (isAdmin && !isPayer)
+                                                                            ? "bg-red-950/10 border-red-900/30 hover:border-red-500/30"
+                                                                            : "bg-zinc-950/30 border-zinc-800/50 hover:border-zinc-700"
                                                             )}>
                                                                 <div className="flex items-center gap-3">
                                                                     <div className={cn(
                                                                         "w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-black border",
                                                                         isPaid
                                                                             ? "bg-emerald-500 text-black border-emerald-400"
-                                                                            : "bg-zinc-800 text-zinc-500 border-zinc-700"
+                                                                            : (isAdmin && !isPayer && !isPendingApproval)
+                                                                                ? "bg-red-950/50 text-red-500 border-red-900/50"
+                                                                                : "bg-zinc-800 text-zinc-500 border-zinc-700"
                                                                     )}>
                                                                         {member.name.substring(0, 2).toUpperCase()}
                                                                     </div>
                                                                     <div>
-                                                                        <p className={cn("text-xs font-bold", isSelf ? "text-white" : "text-zinc-400")}>
+                                                                        <p className={cn("text-xs font-bold", isSelf ? "text-white" : (isAdmin && !isPayer && !isPaid && !isPendingApproval ? "text-red-400/90" : "text-zinc-400"))}>
                                                                             {member.name} {isSelf && "(Vos)"}
                                                                         </p>
                                                                         {isPayer && (
@@ -731,6 +820,11 @@ export default function GroupDashboard({ groupId }: { groupId: string }) {
                                                                         {isPendingApproval && (
                                                                             <p className="text-[8px] text-amber-500 font-black uppercase flex items-center gap-1 mt-0.5 animate-pulse">
                                                                                 <Clock className="w-2 h-2" /> PENDIENTE DE VALIDACIÓN
+                                                                            </p>
+                                                                        )}
+                                                                        {!isPaid && !isPendingApproval && !isPayer && isAdmin && (
+                                                                            <p className="text-[8px] text-red-500/80 font-black uppercase flex items-center gap-1 mt-0.5">
+                                                                                <AlertTriangle className="w-2 h-2" /> FALTA PAGAR
                                                                             </p>
                                                                         )}
                                                                     </div>
@@ -975,6 +1069,17 @@ export default function GroupDashboard({ groupId }: { groupId: string }) {
                     onInviteSent={() => setRefreshInvites(prev => prev + 1)}
                 />
             )}
+
+            <ConfirmationModal
+                isOpen={deleteExpenseModal.isOpen}
+                title="⚠️ Eliminar gasto"
+                description="¿Estás seguro/a que deseas eliminar este gasto de la lista? Se removerá para todos los miembros."
+                confirmText="Sí, eliminar de todos modos"
+                cancelText="Cancelar"
+                isDanger={true}
+                onConfirm={handleDeleteExpense}
+                onCancel={() => setDeleteExpenseModal({ isOpen: false, expenseId: "" })}
+            />
 
             {verificationModal && (
                 <PaymentVerificationModal
